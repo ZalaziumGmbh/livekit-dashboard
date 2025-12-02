@@ -116,7 +116,7 @@ async def add_security_headers(request: Request, call_next):
     # Content Security Policy (adjust as needed)
     csp = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "font-src 'self' https://cdn.jsdelivr.net; "
         "img-src 'self' data: https:; "
