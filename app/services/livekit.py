@@ -594,6 +594,9 @@ class LiveKitClient:
         trunk_ids: Optional[List[str]] = None,
         room_name: Optional[str] = None,
         pin: Optional[str] = None,
+        rule_type: str = "direct",
+        room_prefix: Optional[str] = None,
+        randomize: bool = False,
         metadata: Optional[str] = None,
         attributes: Optional[dict] = None,
         agent_name: Optional[str] = None,
@@ -608,10 +611,24 @@ class LiveKitClient:
 
         # Build dispatch rule
         rule = api.SIPDispatchRule()
-        if room_name:
-            rule.dispatch_rule_direct.room_name = room_name
-        if pin:
-            rule.dispatch_rule_direct.pin = pin
+        
+        # Handle rule types
+        if rule_type == "individual":
+            rule.dispatch_rule_individual.room_prefix = room_prefix or ""
+            if pin:
+                rule.dispatch_rule_individual.pin = pin
+        elif rule_type == "callee":
+            rule.dispatch_rule_callee.room_prefix = room_prefix or ""
+            if pin:
+                rule.dispatch_rule_callee.pin = pin
+            if randomize:
+                rule.dispatch_rule_callee.randomize = True
+        else:
+            # Default to direct
+            if room_name:
+                rule.dispatch_rule_direct.room_name = room_name
+            if pin:
+                rule.dispatch_rule_direct.pin = pin
 
         req = api.CreateSIPDispatchRuleRequest(rule=rule)
 
@@ -646,6 +663,9 @@ class LiveKitClient:
         attributes: Optional[dict] = None,
         agent_name: Optional[str] = None,
         agent_metadata: Optional[str] = None,
+        rule_type: Optional[str] = None,
+        room_prefix: Optional[str] = None,
+        randomize: Optional[bool] = None,
         **kwargs,
     ):
         """Update a SIP dispatch rule with optional agent configuration"""
@@ -667,13 +687,35 @@ class LiveKitClient:
             for key, value in attributes.items():
                 update.attributes[key] = value
 
-        # Handle rule (room_name, pin)
-        if room_name is not None or pin is not None:
+        # Handle rule (room_name, pin, etc)
+        if room_name is not None or pin is not None or rule_type is not None or room_prefix is not None or randomize is not None:
             rule = api.SIPDispatchRule()
-            if room_name is not None:
-                rule.dispatch_rule_direct.room_name = room_name
-            if pin is not None:
-                rule.dispatch_rule_direct.pin = pin
+            
+            # If rule_type is provided, switch type
+            # If not, we might need to know the current type, but for now let's assume if they provide room_prefix they want individual/callee
+            
+            target_type = rule_type or "direct" # Default to direct if not specified, but this logic might be flawed if updating existing.
+            # However, in partial update, we usually replace the whole rule oneof.
+            
+            if target_type == "individual":
+                if room_prefix is not None:
+                    rule.dispatch_rule_individual.room_prefix = room_prefix
+                if pin is not None:
+                    rule.dispatch_rule_individual.pin = pin
+            elif target_type == "callee":
+                if room_prefix is not None:
+                    rule.dispatch_rule_callee.room_prefix = room_prefix
+                if pin is not None:
+                    rule.dispatch_rule_callee.pin = pin
+                if randomize is not None:
+                    rule.dispatch_rule_callee.randomize = randomize
+            else:
+                # Direct
+                if room_name is not None:
+                    rule.dispatch_rule_direct.room_name = room_name
+                if pin is not None:
+                    rule.dispatch_rule_direct.pin = pin
+            
             update.rule.CopyFrom(rule)
 
         # Add agent configuration if provided

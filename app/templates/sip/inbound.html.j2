@@ -395,24 +395,77 @@
                         <label for="rule_name" class="form-label">Rule Name</label>
                         <input type="text" class="form-control" id="rule_name" name="rule_name" placeholder="e.g., Main Office Rule">
                     </div>
+                    <!-- Inbound Routing Section -->
                     <div class="mb-3">
-                        <label for="trunk_ids" class="form-label">Trunk IDs</label>
-                        <select class="form-select" id="trunk_ids" name="trunk_ids" multiple aria-label="Select trunks">
-                            {% for trunk in trunks %}
-                            <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
-                            {% endfor %}
+                        <h6 class="border-top pt-3 mb-3">
+                            <i class="bi bi-signpost-split"></i> Inbound Routing
+                        </h6>
+                        <p class="text-muted small">Configure how inbound calls are dispatched to LiveKit rooms by matching phone numbers and specific trunks.</p>
+                        
+                        <ul class="nav nav-tabs mb-3" id="createRoutingTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="create-phones-tab" data-bs-toggle="tab" data-bs-target="#create-phones" type="button" role="tab" aria-controls="create-phones" aria-selected="true">Phone numbers</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="create-trunks-tab" data-bs-toggle="tab" data-bs-target="#create-trunks" type="button" role="tab" aria-controls="create-trunks" aria-selected="false">Trunks</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="createRoutingTabsContent">
+                            <div class="tab-pane fade show active" id="create-phones" role="tabpanel" aria-labelledby="create-phones-tab">
+                                <div class="mb-3">
+                                    <label for="inbound_numbers" class="form-label">Phone Numbers</label>
+                                    <input type="text" class="form-control" id="inbound_numbers" name="inbound_numbers" placeholder="e.g., +1234567890">
+                                    <small class="form-text text-muted">Comma-separated list of phone numbers to match</small>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="create-trunks" role="tabpanel" aria-labelledby="create-trunks-tab">
+                                <div class="mb-3">
+                                    <label for="trunk_ids" class="form-label">Trunk IDs</label>
+                                    <select class="form-select" id="trunk_ids" name="trunk_ids" multiple aria-label="Select trunks" style="height: 150px;">
+                                        {% for trunk in trunks %}
+                                        <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="form-text text-muted">Select one or more trunks to apply this rule to (Hold Ctrl/Cmd to select multiple)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="rule_type" class="form-label">Rule Type</label>
+                        <select class="form-select" id="rule_type" name="rule_type" onchange="toggleRuleFields('create')">
+                            <option value="direct">Direct (Dispatch to specific room)</option>
+                            <option value="individual">Individual (New room per caller)</option>
+                            <option value="callee">Callee (New room per callee)</option>
                         </select>
-                        <small class="form-text text-muted">Select one or more trunks to apply this rule to (Hold Ctrl/Cmd to select multiple)</small>
                     </div>
-                    <div class="mb-3">
-                        <label for="room_name" class="form-label">Room Name</label>
-                        <input type="text" class="form-control" id="room_name" name="room_name" placeholder="e.g., conference-room-1">
-                        <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+
+                    <div id="create_direct_fields">
+                        <div class="mb-3">
+                            <label for="room_name" class="form-label">Room Name</label>
+                            <input type="text" class="form-control" id="room_name" name="room_name" placeholder="e.g., conference-room-1">
+                            <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                        </div>
                     </div>
+
+                    <div id="create_prefix_fields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="room_prefix" class="form-label">Room Prefix</label>
+                            <input type="text" class="form-control" id="room_prefix" name="room_prefix" placeholder="e.g., call-">
+                            <small class="form-text text-muted">Prefix for generated room names</small>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label for="pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="pin" name="pin" placeholder="e.g., 1234">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
+                    </div>
+
+                    <div id="create_randomize_field" class="mb-3 form-check" style="display: none;">
+                        <input type="checkbox" class="form-check-input" id="randomize" name="randomize" value="true">
+                        <label class="form-check-label" for="randomize">Randomize Room Name</label>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -466,24 +519,76 @@
                         <label for="edit_rule_name" class="form-label">Rule Name</label>
                         <input type="text" class="form-control" id="edit_rule_name" name="rule_name">
                     </div>
+                    <!-- Inbound Routing Section -->
                     <div class="mb-3">
-                        <label for="edit_trunk_ids" class="form-label">Trunk IDs</label>
-                        <select class="form-select" id="edit_trunk_ids" name="trunk_ids" multiple aria-label="Select trunks">
-                            {% for trunk in trunks %}
-                            <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
-                            {% endfor %}
+                        <h6 class="border-top pt-3 mb-3">
+                            <i class="bi bi-signpost-split"></i> Inbound Routing
+                        </h6>
+                        
+                        <ul class="nav nav-tabs mb-3" id="editRoutingTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="edit-phones-tab" data-bs-toggle="tab" data-bs-target="#edit-phones" type="button" role="tab" aria-controls="edit-phones" aria-selected="true">Phone numbers</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="edit-trunks-tab" data-bs-toggle="tab" data-bs-target="#edit-trunks" type="button" role="tab" aria-controls="edit-trunks" aria-selected="false">Trunks</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="editRoutingTabsContent">
+                            <div class="tab-pane fade show active" id="edit-phones" role="tabpanel" aria-labelledby="edit-phones-tab">
+                                <div class="mb-3">
+                                    <label for="edit_inbound_numbers" class="form-label">Phone Numbers</label>
+                                    <input type="text" class="form-control" id="edit_inbound_numbers" name="inbound_numbers">
+                                    <small class="form-text text-muted">Comma-separated list of phone numbers to match</small>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="edit-trunks" role="tabpanel" aria-labelledby="edit-trunks-tab">
+                                <div class="mb-3">
+                                    <label for="edit_trunk_ids" class="form-label">Trunk IDs</label>
+                                    <select class="form-select" id="edit_trunk_ids" name="trunk_ids" multiple aria-label="Select trunks" style="height: 150px;">
+                                        {% for trunk in trunks %}
+                                        <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="form-text text-muted">Select one or more trunks (Hold Ctrl/Cmd to select multiple)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_rule_type" class="form-label">Rule Type</label>
+                        <select class="form-select" id="edit_rule_type" name="rule_type" onchange="toggleRuleFields('edit')">
+                            <option value="direct">Direct (Dispatch to specific room)</option>
+                            <option value="individual">Individual (New room per caller)</option>
+                            <option value="callee">Callee (New room per callee)</option>
                         </select>
-                        <small class="form-text text-muted">Select one or more trunks (Hold Ctrl/Cmd to select multiple)</small>
                     </div>
-                    <div class="mb-3">
-                        <label for="edit_room_name" class="form-label">Room Name</label>
-                        <input type="text" class="form-control" id="edit_room_name" name="room_name">
-                        <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+
+                    <div id="edit_direct_fields">
+                        <div class="mb-3">
+                            <label for="edit_room_name" class="form-label">Room Name</label>
+                            <input type="text" class="form-control" id="edit_room_name" name="room_name">
+                            <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                        </div>
                     </div>
+
+                    <div id="edit_prefix_fields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="edit_room_prefix" class="form-label">Room Prefix</label>
+                            <input type="text" class="form-control" id="edit_room_prefix" name="room_prefix">
+                            <small class="form-text text-muted">Prefix for generated room names</small>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label for="edit_pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="edit_pin" name="pin">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
+                    </div>
+
+                    <div id="edit_randomize_field" class="mb-3 form-check" style="display: none;">
+                        <input type="checkbox" class="form-check-input" id="edit_randomize" name="randomize" value="true">
+                        <label class="form-check-label" for="edit_randomize">Randomize Room Name</label>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -598,44 +703,6 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
 function confirmDeleteTrunk(trunkId, trunkName) {
     document.getElementById('delete_sip_trunk_id').value = trunkId;
     document.getElementById('delete_trunk_name').textContent = trunkName;
-    
-    var modal = new bootstrap.Modal(document.getElementById('deleteTrunkModal'));
-    modal.show();
-}
-
-// Edit Rule
-function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, agentMetadata) {
-    document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
-    document.getElementById('edit_rule_name').value = name;
-    
-    // Handle multi-select for trunk IDs
-    const trunkSelect = document.getElementById('edit_trunk_ids');
-    // Clear previous selections
-    for (let i = 0; i < trunkSelect.options.length; i++) {
-        trunkSelect.options[i].selected = false;
-    }
-    
-    if (trunkIds) {
-        const ids = trunkIds.split(',');
-        for (let i = 0; i < trunkSelect.options.length; i++) {
-            if (ids.includes(trunkSelect.options[i].value)) {
-                trunkSelect.options[i].selected = true;
-            }
-        }
-    }
-    
-    document.getElementById('edit_room_name').value = roomName;
-    document.getElementById('edit_pin').value = pin;
-    document.getElementById('edit_agent_name').value = agentName || '';
-    document.getElementById('edit_agent_metadata').value = agentMetadata || '';
-    document.getElementById('edit_rule_metadata').value = metadata;
-    
-    var modal = new bootstrap.Modal(document.getElementById('editRuleModal'));
-    modal.show();
-}
-
-// Confirm Delete Rule
-function confirmDeleteRule(ruleId, ruleName) {
     document.getElementById('delete_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('delete_rule_name').textContent = ruleName;
     
