@@ -82,7 +82,10 @@
                                         data-trunk-address="{{ trunk.address or trunk.outbound_address or '' }}"
                                         data-trunk-transport="{% if trunk.transport %}{{ trunk.transport|string|lower }}{% else %}tcp{% endif %}"
                                         data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
+                                        data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
                                         data-trunk-auth-username="{{ trunk.auth_username or '' }}"
+                                        data-trunk-media-encryption="{{ trunk.media_encryption or '' }}"
+                                        data-trunk-include-headers="{{ trunk.include_headers or '' }}"
                                         data-bs-toggle="modal" 
                                         data-bs-target="#updateTrunkModal"
                                         title="Edit trunk">
@@ -316,13 +319,38 @@
                                         <small class="text-muted">Custom SIP headers as JSON object (e.g., {"X-Custom": "value"})</small>
                                     </div>
 
-                                    <div class="form-group mb-0">
                                         <label for="headers_to_attributes" class="form-label">
                                             Headers to Attributes Mapping
                                             <i class="bi bi-info-circle text-muted" title="Map SIP headers to participant attributes"></i>
                                         </label>
                                         <textarea class="form-control font-monospace" id="headers_to_attributes" name="headers_to_attributes" rows="3" placeholder='{"X-User-ID": "user_id"}'></textarea>
                                         <small class="text-muted">Map incoming SIP headers to participant attributes</small>
+                                    </div>
+
+                                    <div class="row mt-3">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="media_encryption" class="form-label">
+                                                Media Encryption
+                                                <i class="bi bi-info-circle text-muted" title="Media encryption setting"></i>
+                                            </label>
+                                            <select class="form-select" id="media_encryption" name="media_encryption">
+                                                <option value="">Default</option>
+                                                <option value="disabled">Disabled</option>
+                                                <option value="optional">Optional</option>
+                                                <option value="required">Required</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="include_headers" class="form-label">
+                                                Include Headers
+                                                <i class="bi bi-info-circle text-muted" title="Include SIP headers in events"></i>
+                                            </label>
+                                            <select class="form-select" id="include_headers" name="include_headers">
+                                                <option value="">Default</option>
+                                                <option value="no_headers">No Headers</option>
+                                                <option value="all_headers">All Headers</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -472,13 +500,38 @@
                                         <small class="text-muted">Custom SIP headers as JSON object (e.g., {"X-Custom": "value"})</small>
                                     </div>
 
-                                    <div class="form-group mb-0">
                                         <label for="update_headers_to_attributes" class="form-label">
                                             Headers to Attributes Mapping
                                             <i class="bi bi-info-circle text-muted" title="Map SIP headers to participant attributes"></i>
                                         </label>
                                         <textarea class="form-control font-monospace" id="update_headers_to_attributes" name="headers_to_attributes" rows="3" placeholder='{"X-User-ID": "user_id"}'></textarea>
                                         <small class="text-muted">Map incoming SIP headers to participant attributes</small>
+                                    </div>
+
+                                    <div class="row mt-3">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="update_media_encryption" class="form-label">
+                                                Media Encryption
+                                                <i class="bi bi-info-circle text-muted" title="Media encryption setting"></i>
+                                            </label>
+                                            <select class="form-select" id="update_media_encryption" name="media_encryption">
+                                                <option value="">Default</option>
+                                                <option value="disabled">Disabled</option>
+                                                <option value="optional">Optional</option>
+                                                <option value="required">Required</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="update_include_headers" class="form-label">
+                                                Include Headers
+                                                <i class="bi bi-info-circle text-muted" title="Include SIP headers in events"></i>
+                                            </label>
+                                            <select class="form-select" id="update_include_headers" name="include_headers">
+                                                <option value="">Default</option>
+                                                <option value="no_headers">No Headers</option>
+                                                <option value="all_headers">All Headers</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -967,6 +1020,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 let trunkTransport = this.getAttribute('data-trunk-transport');
                 const trunkNumbers = this.getAttribute('data-trunk-numbers');
                 const trunkAuthUsername = this.getAttribute('data-trunk-auth-username');
+                const trunkMediaEncryption = this.getAttribute('data-trunk-media-encryption');
+                const trunkIncludeHeaders = this.getAttribute('data-trunk-include-headers');
                 
                 // Normalize transport value (handle enum values like SIP_TRANSPORT_TCP)
                 if (trunkTransport) {
@@ -988,6 +1043,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('update_transport').value = trunkTransport;
                 document.getElementById('update_numbers').value = trunkNumbers || '';
                 document.getElementById('update_username').value = trunkAuthUsername || '';
+                document.getElementById('update_media_encryption').value = trunkMediaEncryption || '';
+                document.getElementById('update_include_headers').value = trunkIncludeHeaders || '';
                 
                 // Clear password field
                 document.getElementById('update_password').value = '';

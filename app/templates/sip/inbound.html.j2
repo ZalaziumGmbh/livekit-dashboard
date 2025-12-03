@@ -144,7 +144,6 @@
                         <th>Room Name</th>
                         <th>PIN</th>
                         <th>Agent</th>
-                        <th>Hide Phone</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -188,15 +187,8 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if rule.hide_phone_number %}
-                            <span class="badge badge-info">Yes</span>
-                            {% else %}
-                            <span class="badge badge-secondary">No</span>
-                            {% endif %}
-                        </td>
-                        <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <button class="btn btn-outline-primary" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule.room_name or '' }}', '{{ rule.pin or '' }}', {{ 'true' if rule.hide_phone_number else 'false' }}, '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}')">
+                                <button class="btn btn-outline-primary" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule.room_name or '' }}', '{{ rule.pin or '' }}', '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}')">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                                 <button class="btn btn-outline-danger" onclick="confirmDeleteRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or 'Unnamed' }}')">
@@ -265,6 +257,29 @@
                             <input type="password" class="form-control" id="password" name="password" placeholder="Password">
                         </div>
                     </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="media_encryption" class="form-label">Media Encryption</label>
+                            <select class="form-select" id="media_encryption" name="media_encryption">
+                                <option value="">Default</option>
+                                <option value="disabled">Disabled</option>
+                                <option value="optional">Optional</option>
+                                <option value="required">Required</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="include_headers" class="form-label">Include Headers</label>
+                            <select class="form-select" id="include_headers" name="include_headers">
+                                <option value="">Default</option>
+                                <option value="no_headers">No Headers</option>
+                                <option value="all_headers">All Headers</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="krisp_enabled" name="krisp_enabled" value="true">
+                        <label class="form-check-label" for="krisp_enabled">Enable Krisp Noise Cancellation</label>
+                    </div>
                     <div class="mb-3">
                         <label for="metadata" class="form-label">Metadata (Optional)</label>
                         <textarea class="form-control" id="metadata" name="metadata" rows="2" placeholder="Additional metadata"></textarea>
@@ -324,6 +339,29 @@
                             <input type="password" class="form-control" id="edit_password" name="password" placeholder="Leave empty to keep current">
                         </div>
                     </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_media_encryption" class="form-label">Media Encryption</label>
+                            <select class="form-select" id="edit_media_encryption" name="media_encryption">
+                                <option value="">Default</option>
+                                <option value="disabled">Disabled</option>
+                                <option value="optional">Optional</option>
+                                <option value="required">Required</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="edit_include_headers" class="form-label">Include Headers</label>
+                            <select class="form-select" id="edit_include_headers" name="include_headers">
+                                <option value="">Default</option>
+                                <option value="no_headers">No Headers</option>
+                                <option value="all_headers">All Headers</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit_krisp_enabled" name="krisp_enabled" value="true">
+                        <label class="form-check-label" for="edit_krisp_enabled">Enable Krisp Noise Cancellation</label>
+                    </div>
                     <div class="mb-3">
                         <label for="edit_metadata" class="form-label">Metadata (Optional)</label>
                         <textarea class="form-control" id="edit_metadata" name="metadata" rows="2"></textarea>
@@ -371,13 +409,6 @@
                         <label for="pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="pin" name="pin" placeholder="e.g., 1234">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="hide_phone_number" name="hide_phone_number" value="true">
-                        <label class="form-check-label" for="hide_phone_number">
-                            Hide Phone Number
-                        </label>
-                        <small class="form-text text-muted d-block">Don't expose caller's phone number to room participants</small>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -445,13 +476,6 @@
                         <label for="edit_pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="edit_pin" name="pin">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="edit_hide_phone_number" name="hide_phone_number" value="true">
-                        <label class="form-check-label" for="edit_hide_phone_number">
-                            Hide Phone Number
-                        </label>
-                        <small class="form-text text-muted d-block">Don't expose caller's phone number to room participants</small>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -545,7 +569,7 @@
 
 <script>
 // Edit Trunk
-function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, username, metadata) {
+function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, username, metadata, mediaEncryption, includeHeaders, krispEnabled) {
     document.getElementById('edit_sip_trunk_id').value = trunkId;
     document.getElementById('edit_trunk_name').value = name;
     document.getElementById('edit_numbers').value = numbers;
@@ -554,6 +578,9 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
     document.getElementById('edit_username').value = username;
     document.getElementById('edit_metadata').value = metadata;
     document.getElementById('edit_password').value = ''; // Clear password field
+    document.getElementById('edit_media_encryption').value = mediaEncryption || '';
+    document.getElementById('edit_include_headers').value = includeHeaders || '';
+    document.getElementById('edit_krisp_enabled').checked = krispEnabled === 'true' || krispEnabled === true;
     
     var modal = new bootstrap.Modal(document.getElementById('editTrunkModal'));
     modal.show();
@@ -569,13 +596,12 @@ function confirmDeleteTrunk(trunkId, trunkName) {
 }
 
 // Edit Rule
-function editRule(ruleId, name, trunkIds, roomName, pin, hidePhoneNumber, metadata, agentName, agentMetadata) {
+function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, agentMetadata) {
     document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('edit_rule_name').value = name;
     document.getElementById('edit_trunk_ids').value = trunkIds;
     document.getElementById('edit_room_name').value = roomName;
     document.getElementById('edit_pin').value = pin;
-    document.getElementById('edit_hide_phone_number').checked = hidePhoneNumber;
     document.getElementById('edit_agent_name').value = agentName || '';
     document.getElementById('edit_agent_metadata').value = agentMetadata || '';
     document.getElementById('edit_rule_metadata').value = metadata;

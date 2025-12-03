@@ -310,6 +310,11 @@ class LiveKitClient:
         metadata: Optional[str] = None,
         headers: Optional[dict] = None,
         headers_to_attributes: Optional[dict] = None,
+        metadata: Optional[str] = None,
+        headers: Optional[dict] = None,
+        headers_to_attributes: Optional[dict] = None,
+        media_encryption: Optional[str] = None,
+        include_headers: Optional[str] = None,
         **kwargs,
     ):
         """Create a SIP outbound trunk"""
@@ -346,9 +351,22 @@ class LiveKitClient:
         if headers:
             for key, value in headers.items():
                 trunk_info.headers[key] = value
-        if headers_to_attributes:
             for key, value in headers_to_attributes.items():
                 trunk_info.headers_to_attributes[key] = value
+
+        if media_encryption:
+            if media_encryption == "disabled":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+            elif media_encryption == "optional":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+            elif media_encryption == "required":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+        
+        if include_headers:
+             if include_headers == "no_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_NO_HEADERS
+             elif include_headers == "all_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_ALL_HEADERS
 
         req = api.CreateSIPOutboundTrunkRequest(trunk=trunk_info)
         return await lk.sip.create_outbound_trunk(req)
@@ -366,6 +384,10 @@ class LiveKitClient:
         metadata: Optional[str] = None,
         headers: Optional[dict] = None,
         headers_to_attributes: Optional[dict] = None,
+        headers: Optional[dict] = None,
+        headers_to_attributes: Optional[dict] = None,
+        media_encryption: Optional[str] = None,
+        include_headers: Optional[str] = None,
         **kwargs,
     ):
         """Update a SIP outbound trunk"""
@@ -421,10 +443,25 @@ class LiveKitClient:
             for key, value in headers.items():
                 trunk_info.headers[key] = value
 
-        # Set headers to attributes
         if headers_to_attributes is not None:
             for key, value in headers_to_attributes.items():
                 trunk_info.headers_to_attributes[key] = value
+
+        # Set media encryption
+        if media_encryption is not None:
+            if media_encryption == "disabled":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+            elif media_encryption == "optional":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+            elif media_encryption == "required":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+        
+        # Set include headers
+        if include_headers is not None:
+             if include_headers == "no_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_NO_HEADERS
+             elif include_headers == "all_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_ALL_HEADERS
 
         # The update method expects the trunk_info directly
         return await lk.sip.update_sip_outbound_trunk(trunk_id=sip_trunk_id, trunk=trunk_info)
@@ -447,6 +484,10 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
+        metadata: Optional[str] = None,
+        media_encryption: Optional[str] = None,
+        include_headers: Optional[str] = None,
+        krisp_enabled: bool = False,
         **kwargs,
     ):
         """Create a SIP inbound trunk"""
@@ -472,6 +513,22 @@ class LiveKitClient:
             trunk_info.auth_password = auth_password
         if metadata:
             trunk_info.metadata = metadata
+            
+        if media_encryption:
+            if media_encryption == "disabled":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+            elif media_encryption == "optional":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+            elif media_encryption == "required":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+        
+        if include_headers:
+             if include_headers == "no_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_NO_HEADERS
+             elif include_headers == "all_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_ALL_HEADERS
+        
+        trunk_info.krisp_enabled = krisp_enabled
 
         req = api.CreateSIPInboundTrunkRequest(trunk=trunk_info)
         return await lk.sip.create_inbound_trunk(req)
@@ -486,6 +543,10 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
+        metadata: Optional[str] = None,
+        media_encryption: Optional[str] = None,
+        include_headers: Optional[str] = None,
+        krisp_enabled: Optional[bool] = None,
         **kwargs,
     ):
         """Update a SIP inbound trunk"""
@@ -512,13 +573,29 @@ class LiveKitClient:
         if metadata is not None:
             trunk_info.metadata = metadata
 
+        if media_encryption is not None:
+            if media_encryption == "disabled":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+            elif media_encryption == "optional":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+            elif media_encryption == "required":
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+        
+        if include_headers is not None:
+             if include_headers == "no_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_NO_HEADERS
+             elif include_headers == "all_headers":
+                 trunk_info.include_headers = api.SIPHeaderOptions.SIP_ALL_HEADERS
+        
+        if krisp_enabled is not None:
+            trunk_info.krisp_enabled = krisp_enabled
+
         return await lk.sip.update_inbound_trunk(trunk_id=sip_trunk_id, trunk=trunk_info)
 
     async def create_sip_dispatch_rule(
         self,
         name: Optional[str] = None,
         trunk_ids: Optional[List[str]] = None,
-        hide_phone_number: bool = False,
         room_name: Optional[str] = None,
         pin: Optional[str] = None,
         metadata: Optional[str] = None,
@@ -535,7 +612,6 @@ class LiveKitClient:
 
         # Build dispatch rule
         rule = api.SIPDispatchRule()
-        rule.hide_phone_number = hide_phone_number  # type: ignore[attr-defined]
         rule.room_name = room_name or ""  # type: ignore[attr-defined]
         rule.pin = pin or ""  # type: ignore[attr-defined]
 
@@ -568,7 +644,6 @@ class LiveKitClient:
         sip_dispatch_rule_id: str,
         name: Optional[str] = None,
         trunk_ids: Optional[List[str]] = None,
-        hide_phone_number: Optional[bool] = None,
         room_name: Optional[str] = None,
         pin: Optional[str] = None,
         metadata: Optional[str] = None,
@@ -585,7 +660,6 @@ class LiveKitClient:
 
         # Build dispatch rule (protobuf fields are dynamically generated)
         rule = api.SIPDispatchRule()
-        rule.hide_phone_number = hide_phone_number if hide_phone_number is not None else False  # type: ignore[attr-defined]
         rule.room_name = room_name if room_name is not None else ""  # type: ignore[attr-defined]
         rule.pin = pin if pin is not None else ""  # type: ignore[attr-defined]
 

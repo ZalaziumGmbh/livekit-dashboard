@@ -85,6 +85,8 @@ async def create_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
+    include_headers: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -163,6 +165,8 @@ async def update_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
+    include_headers: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -314,6 +318,9 @@ async def create_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
+    include_headers: Optional[str] = Form(None),
+    krisp_enabled: bool = Form(False),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Create a new SIP inbound trunk"""
@@ -344,6 +351,9 @@ async def create_sip_inbound_trunk(
             auth_username=username,
             auth_password=password,
             metadata=metadata,
+            media_encryption=media_encryption,
+            include_headers=include_headers,
+            krisp_enabled=krisp_enabled,
         )
 
         # Success message
@@ -377,6 +387,9 @@ async def update_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
+    include_headers: Optional[str] = Form(None),
+    krisp_enabled: bool = Form(False),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Update an existing SIP inbound trunk"""
@@ -408,6 +421,9 @@ async def update_sip_inbound_trunk(
             auth_username=username,
             auth_password=password if password else None,
             metadata=metadata,
+            media_encryption=media_encryption,
+            include_headers=include_headers,
+            krisp_enabled=krisp_enabled,
         )
 
         # Success message
@@ -472,7 +488,6 @@ async def create_dispatch_rule(
     trunk_ids: Optional[str] = Form(None),
     room_name: Optional[str] = Form(None),
     pin: Optional[str] = Form(None),
-    hide_phone_number: bool = Form(False),
     agent_name: Optional[str] = Form(None),
     agent_metadata: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
@@ -495,7 +510,6 @@ async def create_dispatch_rule(
             trunk_ids=trunk_ids_list,
             room_name=room_name,
             pin=pin,
-            hide_phone_number=hide_phone_number,
             agent_name=agent_name,
             agent_metadata=agent_metadata,
             metadata=metadata,
@@ -529,7 +543,6 @@ async def update_dispatch_rule(
     trunk_ids: Optional[str] = Form(None),
     room_name: Optional[str] = Form(None),
     pin: Optional[str] = Form(None),
-    hide_phone_number: bool = Form(False),
     agent_name: Optional[str] = Form(None),
     agent_metadata: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
@@ -553,7 +566,6 @@ async def update_dispatch_rule(
             trunk_ids=trunk_ids_list,
             room_name=room_name,
             pin=pin,
-            hide_phone_number=hide_phone_number,
             agent_name=agent_name,
             agent_metadata=agent_metadata,
             metadata=metadata,
