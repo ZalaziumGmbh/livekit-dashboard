@@ -397,8 +397,12 @@
                     </div>
                     <div class="mb-3">
                         <label for="trunk_ids" class="form-label">Trunk IDs</label>
-                        <input type="text" class="form-control" id="trunk_ids" name="trunk_ids" placeholder="e.g., trunk-id-1, trunk-id-2">
-                        <small class="form-text text-muted">Comma-separated list of trunk IDs to apply this rule to</small>
+                        <select class="form-select" id="trunk_ids" name="trunk_ids" multiple aria-label="Select trunks">
+                            {% for trunk in trunks %}
+                            <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Select one or more trunks to apply this rule to (Hold Ctrl/Cmd to select multiple)</small>
                     </div>
                     <div class="mb-3">
                         <label for="room_name" class="form-label">Room Name</label>
@@ -464,8 +468,12 @@
                     </div>
                     <div class="mb-3">
                         <label for="edit_trunk_ids" class="form-label">Trunk IDs</label>
-                        <input type="text" class="form-control" id="edit_trunk_ids" name="trunk_ids">
-                        <small class="form-text text-muted">Comma-separated list of trunk IDs</small>
+                        <select class="form-select" id="edit_trunk_ids" name="trunk_ids" multiple aria-label="Select trunks">
+                            {% for trunk in trunks %}
+                            <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Select one or more trunks (Hold Ctrl/Cmd to select multiple)</small>
                     </div>
                     <div class="mb-3">
                         <label for="edit_room_name" class="form-label">Room Name</label>
@@ -599,7 +607,23 @@ function confirmDeleteTrunk(trunkId, trunkName) {
 function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, agentMetadata) {
     document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('edit_rule_name').value = name;
-    document.getElementById('edit_trunk_ids').value = trunkIds;
+    
+    // Handle multi-select for trunk IDs
+    const trunkSelect = document.getElementById('edit_trunk_ids');
+    // Clear previous selections
+    for (let i = 0; i < trunkSelect.options.length; i++) {
+        trunkSelect.options[i].selected = false;
+    }
+    
+    if (trunkIds) {
+        const ids = trunkIds.split(',');
+        for (let i = 0; i < trunkSelect.options.length; i++) {
+            if (ids.includes(trunkSelect.options[i].value)) {
+                trunkSelect.options[i].selected = true;
+            }
+        }
+    }
+    
     document.getElementById('edit_room_name').value = roomName;
     document.getElementById('edit_pin').value = pin;
     document.getElementById('edit_agent_name').value = agentName || '';

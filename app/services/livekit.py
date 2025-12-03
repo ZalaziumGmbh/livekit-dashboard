@@ -381,8 +381,7 @@ class LiveKitClient:
         metadata: Optional[str] = None,
         headers: Optional[dict] = None,
         headers_to_attributes: Optional[dict] = None,
-        headers: Optional[dict] = None,
-        headers_to_attributes: Optional[dict] = None,
+
         media_encryption: Optional[str] = None,
         include_headers: Optional[str] = None,
         **kwargs,
@@ -481,7 +480,7 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
-        metadata: Optional[str] = None,
+
         media_encryption: Optional[str] = None,
         include_headers: Optional[str] = None,
         krisp_enabled: bool = False,
@@ -540,7 +539,7 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
-        metadata: Optional[str] = None,
+
         media_encryption: Optional[str] = None,
         include_headers: Optional[str] = None,
         krisp_enabled: Optional[bool] = None,
