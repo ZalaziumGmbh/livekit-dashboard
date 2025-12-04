@@ -290,6 +290,7 @@ async def sip_inbound_index(
 
     rules = await lk.list_sip_dispatch_rules()
     trunks = await lk.list_sip_inbound_trunks()
+    configured_agents = await lk.get_configured_agents()
     current_user = get_current_user(request)
 
     return request.app.state.templates.TemplateResponse(
@@ -298,6 +299,7 @@ async def sip_inbound_index(
             "request": request,
             "rules": rules,
             "trunks": trunks,
+            "configured_agents": configured_agents,
             "current_user": current_user,
             "sip_enabled": lk.sip_enabled,
             "csrf_token": get_csrf_token(request),
@@ -488,7 +490,7 @@ async def create_dispatch_rule(
     trunk_ids: Optional[str] = Form(None),
     room_name: Optional[str] = Form(None),
     pin: Optional[str] = Form(None),
-    rule_type: str = Form("direct"),
+    rule_type: str = Form("individual"),
     room_prefix: Optional[str] = Form(None),
     randomize: bool = Form(False),
     agent_name: Optional[str] = Form(None),

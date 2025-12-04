@@ -614,11 +614,13 @@ class LiveKitClient:
         
         # Handle rule types
         if rule_type == "individual":
-            rule.dispatch_rule_individual.room_prefix = room_prefix or ""
+            # Default to "call-" prefix if none provided for individual rooms
+            rule.dispatch_rule_individual.room_prefix = room_prefix or "call-"
             if pin:
                 rule.dispatch_rule_individual.pin = pin
         elif rule_type == "callee":
-            rule.dispatch_rule_callee.room_prefix = room_prefix or ""
+            # Default to "call-" prefix if none provided for callee rooms
+            rule.dispatch_rule_callee.room_prefix = room_prefix or "call-"
             if pin:
                 rule.dispatch_rule_callee.pin = pin
             if randomize:
@@ -751,6 +753,164 @@ class LiveKitClient:
         lk = await self._get_api()
         req = api.DeleteSIPDispatchRuleRequest(sip_dispatch_rule_id=sip_dispatch_rule_id)
         return await lk.sip.delete_dispatch_rule(req)
+
+    # Agent Management
+    async def list_agent_dispatches(self, room_name: str) -> List:
+        """List all agent dispatches in a specific room"""
+        try:
+            lk = await self._get_api()
+            dispatches = await lk.agent_dispatch.list_dispatch(room_name=room_name)
+            return list(dispatches) if dispatches else []
+        except Exception as e:
+            print(f"Error listing agent dispatches for room {room_name}: {e}")
+            return []
+
+    async def get_all_agents(self) -> List[Dict[str, Any]]:
+        """Get all agents across all rooms with their status"""
+        try:
+            rooms, _ = await self.list_rooms()
+            all_agents = []
+            seen_agents = {}  # Track unique agents by name
+
+            for room in rooms:
+                try:
+                    # Get agent dispatches for this room
+                    dispatches = await self.list_agent_dispatches(room.name)
+
+                    for dispatch in dispatches:
+                        agent_name = getattr(dispatch, 'agent_name', 'Unknown')
+                        dispatch_id = getattr(dispatch, 'id', '')
+
+                        # Get job status
+                        jobs = []
+                        status = 'UNKNOWN'
+                        worker_id = None
+                        started_at = None
+
+                        if hasattr(dispatch, 'state') and dispatch.state:
+                            if hasattr(dispatch.state, 'jobs') and dispatch.state.jobs:
+                                for job in dispatch.state.jobs:
+                                    job_info = {
+                                        'id': getattr(job, 'id', ''),
+                                        'type': str(getattr(job, 'type', '')),
+                                        'status': 'UNKNOWN',
+                                        'worker_id': None,
+                                        'started_at': None,
+                                        'room': room.name,
+                                    }
+
+                                    if hasattr(job, 'state') and job.state:
+                                        # JobStatus: JS_PENDING=0, JS_RUNNING=1, JS_SUCCESS=2, JS_FAILED=3
+                                        job_status = getattr(job.state, 'status', 0)
+                                        status_map = {0: 'PENDING', 1: 'RUNNING', 2: 'SUCCESS', 3: 'FAILED'}
+                                        job_info['status'] = status_map.get(job_status, 'UNKNOWN')
+                                        job_info['worker_id'] = getattr(job.state, 'worker_id', None)
+                                        job_info['started_at'] = getattr(job.state, 'started_at', None)
+                                        job_info['error'] = getattr(job.state, 'error', None)
+
+                                        # Use the most recent job's status as the agent status
+                                        if job_info['status'] == 'RUNNING':
+                                            status = 'RUNNING'
+                                            worker_id = job_info['worker_id']
+                                            started_at = job_info['started_at']
+                                        elif status != 'RUNNING':
+                                            status = job_info['status']
+
+                                    jobs.append(job_info)
+
+                        agent_info = {
+                            'agent_name': agent_name,
+                            'dispatch_id': dispatch_id,
+                            'room': room.name,
+                            'status': status,
+                            'worker_id': worker_id,
+                            'started_at': started_at,
+                            'jobs': jobs,
+                            'concurrent_sessions': len([j for j in jobs if j['status'] == 'RUNNING']),
+                            'metadata': getattr(dispatch, 'metadata', ''),
+                        }
+
+                        # Track unique agents
+                        if agent_name not in seen_agents:
+                            seen_agents[agent_name] = {
+                                'agent_name': agent_name,
+                                'status': status,
+                                'concurrent_sessions': 0,
+                                'rooms': [],
+                                'dispatches': [],
+                            }
+
+                        seen_agents[agent_name]['dispatches'].append(agent_info)
+                        seen_agents[agent_name]['rooms'].append(room.name)
+                        if status == 'RUNNING':
+                            seen_agents[agent_name]['status'] = 'RUNNING'
+                            seen_agents[agent_name]['concurrent_sessions'] += agent_info['concurrent_sessions']
+
+                        all_agents.append(agent_info)
+
+                except Exception as e:
+                    print(f"Error getting agents for room {room.name}: {e}")
+                    continue
+
+            return list(seen_agents.values())
+
+        except Exception as e:
+            print(f"Error getting all agents: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    async def get_agent_analytics(self) -> Dict[str, Any]:
+        """Get agent analytics summary"""
+        try:
+            agents = await self.get_all_agents()
+
+            total_agents = len(agents)
+            running_agents = len([a for a in agents if a['status'] == 'RUNNING'])
+            total_sessions = sum(a.get('concurrent_sessions', 0) for a in agents)
+
+            return {
+                'agents_deployed': total_agents,
+                'concurrent_sessions': total_sessions,
+                'running_agents': running_agents,
+                'agents': agents,
+            }
+        except Exception as e:
+            print(f"Error getting agent analytics: {e}")
+            return {
+                'agents_deployed': 0,
+                'concurrent_sessions': 0,
+                'running_agents': 0,
+                'agents': [],
+            }
+
+    async def create_agent_dispatch(
+        self,
+        room_name: str,
+        agent_name: str,
+        metadata: Optional[str] = None,
+    ):
+        """Create an agent dispatch to join a room"""
+        try:
+            lk = await self._get_api()
+            req = api.CreateAgentDispatchRequest(
+                room=room_name,
+                agent_name=agent_name,
+                metadata=metadata or "",
+            )
+            return await lk.agent_dispatch.create_dispatch(req)
+        except Exception as e:
+            print(f"Error creating agent dispatch: {e}")
+            raise
+
+    async def delete_agent_dispatch(self, dispatch_id: str, room_name: str):
+        """Delete an agent dispatch"""
+        try:
+            lk = await self._get_api()
+            return await lk.agent_dispatch.delete_dispatch(dispatch_id=dispatch_id, room_name=room_name)
+        except Exception as e:
+            print(f"Error deleting agent dispatch: {e}")
+            raise
 
     # Room Analytics
     async def get_room_analytics(self) -> dict:
@@ -1311,6 +1471,153 @@ class LiveKitClient:
                 stats_dict["subscriber_stats"].append(stat_info)
         
         return stats_dict, latency
+
+    # Agent Management
+    async def list_agent_dispatches(self, room_name: Optional[str] = None) -> List:
+        """List agent dispatches, optionally filtered by room"""
+        try:
+            lk = await self._get_api()
+            req = api.ListAgentDispatchRequest(room=room_name or "")
+            resp = await lk.agent_dispatch.list_dispatch(req)
+            return list(resp.agent_dispatches) if hasattr(resp, "agent_dispatches") else []
+        except Exception as e:
+            print(f"Error listing agent dispatches: {e}")
+            return []
+
+    async def create_agent_dispatch(
+        self,
+        room_name: str,
+        agent_name: str,
+        metadata: Optional[str] = None,
+    ):
+        """Create an agent dispatch to spawn an agent in a room"""
+        lk = await self._get_api()
+        req = api.CreateAgentDispatchRequest(
+            room=room_name,
+            agent_name=agent_name,
+            metadata=metadata or "",
+        )
+        return await lk.agent_dispatch.create_dispatch(req)
+
+    async def delete_agent_dispatch(self, dispatch_id: str, room_name: str):
+        """Delete an agent dispatch"""
+        lk = await self._get_api()
+        req = api.DeleteAgentDispatchRequest(
+            dispatch_id=dispatch_id,
+            room=room_name,
+        )
+        return await lk.agent_dispatch.delete_dispatch(req)
+
+    async def get_agents_in_rooms(self) -> List[Dict[str, Any]]:
+        """Get all agents currently active in rooms by checking participants"""
+        try:
+            rooms, _ = await self.list_rooms()
+            agents = []
+
+            for room in rooms:
+                participants = await self.list_participants(room.name)
+                for participant in participants:
+                    # Check if participant is an agent (typically has agent-related metadata or kind)
+                    kind = getattr(participant, 'kind', 0)
+                    # ParticipantInfo.Kind: STANDARD=0, INGRESS=1, EGRESS=2, SIP=3, AGENT=4
+                    if kind == 4:  # AGENT
+                        agents.append({
+                            "identity": participant.identity,
+                            "name": getattr(participant, 'name', participant.identity),
+                            "room": room.name,
+                            "state": getattr(participant, 'state', 0),
+                            "joined_at": getattr(participant, 'joined_at', 0),
+                            "metadata": getattr(participant, 'metadata', ''),
+                            "is_publishing": getattr(participant, 'is_publishing', False),
+                        })
+
+            return agents
+        except Exception as e:
+            print(f"Error getting agents in rooms: {e}")
+            return []
+
+    async def get_configured_agents(self) -> List[Dict[str, Any]]:
+        """Get list of configured agents from SIP dispatch rules"""
+        if not self.sip_enabled:
+            return []
+
+        try:
+            rules = await self.list_sip_dispatch_rules()
+            agents = {}
+
+            for rule in rules:
+                if hasattr(rule, 'room_config') and rule.room_config:
+                    if hasattr(rule.room_config, 'agents') and rule.room_config.agents:
+                        for agent in rule.room_config.agents:
+                            agent_name = getattr(agent, 'agent_name', '')
+                            if agent_name and agent_name not in agents:
+                                agents[agent_name] = {
+                                    "name": agent_name,
+                                    "metadata": getattr(agent, 'metadata', ''),
+                                    "source": "sip_dispatch_rule",
+                                    "rule_name": getattr(rule, 'name', 'Unknown'),
+                                }
+
+            return list(agents.values())
+        except Exception as e:
+            print(f"Error getting configured agents: {e}")
+            return []
+
+    async def get_agent_analytics(self) -> Dict[str, Any]:
+        """Get analytics data about agents"""
+        try:
+            # Get agents currently in rooms
+            active_agents = await self.get_agents_in_rooms()
+
+            # Get configured agents from dispatch rules
+            configured_agents = await self.get_configured_agents()
+
+            # Get unique agent names
+            active_agent_names = set(a.get('identity', '').split('-')[0] for a in active_agents)
+            configured_agent_names = set(a.get('name', '') for a in configured_agents)
+            all_agent_names = active_agent_names | configured_agent_names
+
+            # Count concurrent sessions (agents in rooms)
+            concurrent_sessions = len(active_agents)
+
+            # Build agent list with status
+            agent_list = []
+            for agent_name in all_agent_names:
+                if not agent_name:
+                    continue
+
+                # Check if agent is active
+                active_instances = [a for a in active_agents if a.get('identity', '').startswith(agent_name)]
+                is_active = len(active_instances) > 0
+
+                # Get config info if available
+                config = next((c for c in configured_agents if c.get('name') == agent_name), None)
+
+                agent_list.append({
+                    "name": agent_name,
+                    "status": "RUNNING" if is_active else "CONFIGURED",
+                    "concurrent_sessions": len(active_instances),
+                    "metadata": config.get('metadata', '') if config else '',
+                    "source": config.get('source', 'room') if config else 'room',
+                    "instances": active_instances,
+                })
+
+            return {
+                "agents_deployed": len(all_agent_names),
+                "concurrent_sessions": concurrent_sessions,
+                "agent_list": agent_list,
+                "active_agents": active_agents,
+                "configured_agents": configured_agents,
+            }
+        except Exception as e:
+            print(f"Error getting agent analytics: {e}")
+            return {
+                "agents_deployed": 0,
+                "concurrent_sessions": 0,
+                "agent_list": [],
+                "active_agents": [],
+                "configured_agents": [],
+            }
 
 
 # Dependency injection helper

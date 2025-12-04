@@ -141,8 +141,8 @@
                         <th>Rule ID</th>
                         <th>Name</th>
                         <th>Trunk IDs</th>
-                        <th>Room Name</th>
-                        <th>PIN</th>
+                        <th>Type</th>
+                        <th>Room / Prefix</th>
                         <th>Agent</th>
                         <th>Actions</th>
                     </tr>
@@ -168,13 +168,23 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span style="color: var(--text-secondary);">{{ rule.room_name or '-' }}</span>
+                            {% if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name %}
+                            <span class="badge bg-warning text-dark">Direct</span>
+                            {% elif rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix %}
+                            <span class="badge bg-info">Callee</span>
+                            {% else %}
+                            <span class="badge bg-success">Individual</span>
+                            {% endif %}
                         </td>
                         <td>
-                            {% if rule.pin %}
-                            <span class="badge badge-secondary">{{ rule.pin }}</span>
+                            {% if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name %}
+                            <span style="color: var(--text-secondary);">{{ rule.rule.dispatch_rule_direct.room_name }}</span>
+                            {% elif rule.rule and rule.rule.dispatch_rule_individual and rule.rule.dispatch_rule_individual.room_prefix %}
+                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">{{ rule.rule.dispatch_rule_individual.room_prefix }}*</code>
+                            {% elif rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix %}
+                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">{{ rule.rule.dispatch_rule_callee.room_prefix }}*</code>
                             {% else %}
-                            <span class="text-muted">No PIN</span>
+                            <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td>
@@ -188,7 +198,7 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <button class="btn btn-outline-primary" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule.room_name or '' }}', '{{ rule.pin or '' }}', '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}')">
+                                <button class="btn btn-outline-primary" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule.rule.dispatch_rule_direct.room_name if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name else '' }}', '{{ rule.rule.dispatch_rule_direct.pin if rule.rule and rule.rule.dispatch_rule_direct else (rule.rule.dispatch_rule_individual.pin if rule.rule and rule.rule.dispatch_rule_individual else (rule.rule.dispatch_rule_callee.pin if rule.rule and rule.rule.dispatch_rule_callee else '')) }}', '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ 'direct' if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name else ('callee' if rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix else 'individual') }}', '{{ rule.rule.dispatch_rule_individual.room_prefix if rule.rule and rule.rule.dispatch_rule_individual else (rule.rule.dispatch_rule_callee.room_prefix if rule.rule and rule.rule.dispatch_rule_callee else '') }}')">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                                 <button class="btn btn-outline-danger" onclick="confirmDeleteRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or 'Unnamed' }}')">
@@ -435,25 +445,26 @@
                     <div class="mb-3">
                         <label for="rule_type" class="form-label">Rule Type</label>
                         <select class="form-select" id="rule_type" name="rule_type" onchange="toggleRuleFields('create')">
+                            <option value="individual" selected>Individual (New room per caller)</option>
                             <option value="direct">Direct (Dispatch to specific room)</option>
-                            <option value="individual">Individual (New room per caller)</option>
                             <option value="callee">Callee (New room per callee)</option>
                         </select>
+                        <small class="form-text text-muted">Individual mode creates a unique private room for each caller</small>
                     </div>
 
-                    <div id="create_direct_fields">
+                    <div id="create_direct_fields" style="display: none;">
                         <div class="mb-3">
                             <label for="room_name" class="form-label">Room Name</label>
                             <input type="text" class="form-control" id="room_name" name="room_name" placeholder="e.g., conference-room-1">
-                            <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                            <small class="form-text text-muted">The LiveKit room where calls will be routed (all callers share this room)</small>
                         </div>
                     </div>
 
-                    <div id="create_prefix_fields" style="display: none;">
+                    <div id="create_prefix_fields">
                         <div class="mb-3">
                             <label for="room_prefix" class="form-label">Room Prefix</label>
-                            <input type="text" class="form-control" id="room_prefix" name="room_prefix" placeholder="e.g., call-">
-                            <small class="form-text text-muted">Prefix for generated room names</small>
+                            <input type="text" class="form-control" id="room_prefix" name="room_prefix" placeholder="e.g., call-" value="call-">
+                            <small class="form-text text-muted">Prefix for generated room names (e.g., call-abc123, call-def456)</small>
                         </div>
                     </div>
 
@@ -476,7 +487,20 @@
                     </div>
                     <div class="mb-3">
                         <label for="agent_name" class="form-label">Agent Name</label>
+                        {% if configured_agents %}
+                        <div class="input-group">
+                            <select class="form-select" id="agent_select" onchange="updateAgentName('create')">
+                                <option value="">-- Select existing agent or enter custom --</option>
+                                {% for agent in configured_agents %}
+                                <option value="{{ agent.name }}">{{ agent.name }}</option>
+                                {% endfor %}
+                                <option value="__custom__">Enter custom agent name...</option>
+                            </select>
+                        </div>
+                        <input type="text" class="form-control mt-2" id="agent_name" name="agent_name" placeholder="e.g., inbound-agent" style="display: none;">
+                        {% else %}
                         <input type="text" class="form-control" id="agent_name" name="agent_name" placeholder="e.g., inbound-agent">
+                        {% endif %}
                         <small class="form-text text-muted">Name of the agent to dispatch to the room</small>
                     </div>
                     <div class="mb-3">
@@ -558,25 +582,26 @@
                     <div class="mb-3">
                         <label for="edit_rule_type" class="form-label">Rule Type</label>
                         <select class="form-select" id="edit_rule_type" name="rule_type" onchange="toggleRuleFields('edit')">
-                            <option value="direct">Direct (Dispatch to specific room)</option>
                             <option value="individual">Individual (New room per caller)</option>
+                            <option value="direct">Direct (Dispatch to specific room)</option>
                             <option value="callee">Callee (New room per callee)</option>
                         </select>
+                        <small class="form-text text-muted">Individual mode creates a unique private room for each caller</small>
                     </div>
 
-                    <div id="edit_direct_fields">
+                    <div id="edit_direct_fields" style="display: none;">
                         <div class="mb-3">
                             <label for="edit_room_name" class="form-label">Room Name</label>
                             <input type="text" class="form-control" id="edit_room_name" name="room_name">
-                            <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                            <small class="form-text text-muted">The LiveKit room where calls will be routed (all callers share this room)</small>
                         </div>
                     </div>
 
-                    <div id="edit_prefix_fields" style="display: none;">
+                    <div id="edit_prefix_fields">
                         <div class="mb-3">
                             <label for="edit_room_prefix" class="form-label">Room Prefix</label>
                             <input type="text" class="form-control" id="edit_room_prefix" name="room_prefix">
-                            <small class="form-text text-muted">Prefix for generated room names</small>
+                            <small class="form-text text-muted">Prefix for generated room names (e.g., call-abc123, call-def456)</small>
                         </div>
                     </div>
 
@@ -599,7 +624,20 @@
                     </div>
                     <div class="mb-3">
                         <label for="edit_agent_name" class="form-label">Agent Name</label>
+                        {% if configured_agents %}
+                        <div class="input-group">
+                            <select class="form-select" id="edit_agent_select" onchange="updateAgentName('edit')">
+                                <option value="">-- No agent / Select existing --</option>
+                                {% for agent in configured_agents %}
+                                <option value="{{ agent.name }}">{{ agent.name }}</option>
+                                {% endfor %}
+                                <option value="__custom__">Enter custom agent name...</option>
+                            </select>
+                        </div>
+                        <input type="text" class="form-control mt-2" id="edit_agent_name" name="agent_name" placeholder="e.g., inbound-agent" style="display: none;">
+                        {% else %}
                         <input type="text" class="form-control" id="edit_agent_name" name="agent_name" placeholder="e.g., inbound-agent">
+                        {% endif %}
                         <small class="form-text text-muted">Name of the agent to dispatch to the room. Leave empty to remove agent</small>
                     </div>
                     <div class="mb-3">
@@ -681,6 +719,28 @@
 </div>
 
 <script>
+// Toggle rule type fields visibility
+function toggleRuleFields(prefix) {
+    var ruleType = document.getElementById(prefix === 'create' ? 'rule_type' : 'edit_rule_type').value;
+    var directFields = document.getElementById(prefix + '_direct_fields');
+    var prefixFields = document.getElementById(prefix + '_prefix_fields');
+    var randomizeField = document.getElementById(prefix + '_randomize_field');
+
+    if (ruleType === 'direct') {
+        directFields.style.display = 'block';
+        prefixFields.style.display = 'none';
+        if (randomizeField) randomizeField.style.display = 'none';
+    } else if (ruleType === 'individual') {
+        directFields.style.display = 'none';
+        prefixFields.style.display = 'block';
+        if (randomizeField) randomizeField.style.display = 'none';
+    } else if (ruleType === 'callee') {
+        directFields.style.display = 'none';
+        prefixFields.style.display = 'block';
+        if (randomizeField) randomizeField.style.display = 'block';
+    }
+}
+
 // Edit Trunk
 function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, username, metadata, mediaEncryption, includeHeaders, krispEnabled) {
     document.getElementById('edit_sip_trunk_id').value = trunkId;
@@ -694,7 +754,7 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
     document.getElementById('edit_media_encryption').value = mediaEncryption || '';
     document.getElementById('edit_include_headers').value = includeHeaders || '';
     document.getElementById('edit_krisp_enabled').checked = krispEnabled === 'true' || krispEnabled === true;
-    
+
     var modal = new bootstrap.Modal(document.getElementById('editTrunkModal'));
     modal.show();
 }
@@ -703,9 +763,122 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
 function confirmDeleteTrunk(trunkId, trunkName) {
     document.getElementById('delete_sip_trunk_id').value = trunkId;
     document.getElementById('delete_trunk_name').textContent = trunkName;
+
+    var modal = new bootstrap.Modal(document.getElementById('deleteTrunkModal'));
+    modal.show();
+}
+
+// Update agent name based on selection
+function updateAgentName(prefix) {
+    var selectId = prefix === 'create' ? 'agent_select' : 'edit_agent_select';
+    var inputId = prefix === 'create' ? 'agent_name' : 'edit_agent_name';
+    var select = document.getElementById(selectId);
+    var input = document.getElementById(inputId);
+
+    if (!select || !input) return;
+
+    var selectedValue = select.value;
+
+    if (selectedValue === '__custom__') {
+        // Show custom input field
+        input.style.display = 'block';
+        input.value = '';
+        input.focus();
+    } else {
+        // Hide custom input and set value from select
+        input.style.display = 'none';
+        input.value = selectedValue;
+    }
+}
+
+// Set agent select value based on agent name
+function setAgentSelect(prefix, agentName) {
+    var selectId = prefix === 'create' ? 'agent_select' : 'edit_agent_select';
+    var inputId = prefix === 'create' ? 'agent_name' : 'edit_agent_name';
+    var select = document.getElementById(selectId);
+    var input = document.getElementById(inputId);
+
+    if (!select || !input) {
+        // Fallback if no select exists (no configured agents)
+        if (input) input.value = agentName || '';
+        return;
+    }
+
+    // Check if agentName matches any option in the select
+    var found = false;
+    for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === agentName) {
+            select.selectedIndex = i;
+            found = true;
+            break;
+        }
+    }
+
+    if (found) {
+        input.style.display = 'none';
+        input.value = agentName;
+    } else if (agentName) {
+        // Custom agent name - show input
+        select.value = '__custom__';
+        input.style.display = 'block';
+        input.value = agentName;
+    } else {
+        // No agent - reset to first option
+        select.selectedIndex = 0;
+        input.style.display = 'none';
+        input.value = '';
+    }
+}
+
+// Edit Rule
+function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, agentMetadata, ruleType, roomPrefix) {
+    document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
+    document.getElementById('edit_rule_name').value = name;
+    document.getElementById('edit_room_name').value = roomName || '';
+    document.getElementById('edit_pin').value = pin || '';
+    document.getElementById('edit_rule_metadata').value = metadata || '';
+    document.getElementById('edit_agent_metadata').value = agentMetadata || '';
+    document.getElementById('edit_room_prefix').value = roomPrefix || 'call-';
+
+    // Set agent name with dropdown support
+    setAgentSelect('edit', agentName);
+
+    // Set rule type and toggle fields
+    var ruleTypeSelect = document.getElementById('edit_rule_type');
+    if (ruleType) {
+        ruleTypeSelect.value = ruleType;
+    } else if (roomName) {
+        ruleTypeSelect.value = 'direct';
+    } else {
+        ruleTypeSelect.value = 'individual';
+    }
+    toggleRuleFields('edit');
+
+    // Handle trunk IDs selection
+    var trunkSelect = document.getElementById('edit_trunk_ids');
+    // Clear all selections first
+    for (var i = 0; i < trunkSelect.options.length; i++) {
+        trunkSelect.options[i].selected = false;
+    }
+    // Select the matching trunk IDs
+    if (trunkIds) {
+        var trunkIdArray = trunkIds.split(',');
+        for (var i = 0; i < trunkSelect.options.length; i++) {
+            if (trunkIdArray.includes(trunkSelect.options[i].value)) {
+                trunkSelect.options[i].selected = true;
+            }
+        }
+    }
+
+    var modal = new bootstrap.Modal(document.getElementById('editRuleModal'));
+    modal.show();
+}
+
+// Confirm Delete Rule
+function confirmDeleteRule(ruleId, ruleName) {
     document.getElementById('delete_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('delete_rule_name').textContent = ruleName;
-    
+
     var modal = new bootstrap.Modal(document.getElementById('deleteRuleModal'));
     modal.show();
 }

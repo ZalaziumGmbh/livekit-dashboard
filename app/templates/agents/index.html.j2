@@ -1,0 +1,263 @@
+{% extends "base.html.j2" %}
+
+{% block title %}Agents - LiveKit Dashboard{% endblock %}
+
+{% block page_title %}Agents{% endblock %}
+
+{% block page_subtitle %}
+<p class="page-subtitle">Agent Deployment & Monitoring</p>
+{% endblock %}
+
+{% block content %}
+<!-- Flash Messages -->
+{% if flash_message %}
+<div class="alert alert-{{ flash_type or 'info' }} alert-dismissible fade show" role="alert">
+    {{ flash_message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Stats -->
+<div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+    <div class="stat-card">
+        <div class="stat-label">
+            <i class="bi bi-robot"></i> Agents Deployed
+        </div>
+        <div class="stat-value info">
+            {{ analytics.agents_deployed or 0 }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">
+            <i class="bi bi-activity"></i> Concurrent Sessions
+        </div>
+        <div class="stat-value success">
+            {{ analytics.concurrent_sessions or 0 }}
+        </div>
+    </div>
+</div>
+
+<!-- Overview Section -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title">
+            <i class="bi bi-graph-up"></i> Overview
+        </h5>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-12">
+                <p class="text-muted mb-0">
+                    Agent sessions are tracked when agents join rooms. Configured agents are detected from SIP dispatch rules.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Your Agents Table -->
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title">
+            <i class="bi bi-robot"></i> Your Agents
+        </h5>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#dispatchAgentModal">
+            <i class="bi bi-plus-circle"></i> Dispatch Agent
+        </button>
+    </div>
+    <div class="card-body">
+        {% if agents %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Agent Name</th>
+                        <th>Status</th>
+                        <th>Concurrent Sessions</th>
+                        <th>Source</th>
+                        <th>Metadata</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent in agents %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-robot me-2" style="font-size: 1.25rem; color: var(--text-secondary);"></i>
+                                <div>
+                                    <strong style="color: var(--text-primary);">{{ agent.name }}</strong>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if agent.status == 'RUNNING' %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i> RUNNING
+                            </span>
+                            {% elif agent.status == 'CONFIGURED' %}
+                            <span class="badge bg-secondary">
+                                <i class="bi bi-circle me-1" style="font-size: 0.5rem;"></i> CONFIGURED
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">{{ agent.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span style="color: var(--text-secondary);">{{ agent.concurrent_sessions or 0 }}</span>
+                        </td>
+                        <td>
+                            {% if agent.source == 'sip_dispatch_rule' %}
+                            <span class="badge bg-info">SIP Dispatch</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Room</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if agent.metadata %}
+                            <small style="color: var(--text-secondary);">{{ agent.metadata[:50] }}{% if agent.metadata|length > 50 %}...{% endif %}</small>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-robot"></i>
+            </div>
+            <div class="empty-state-title">No agents detected</div>
+            <div class="empty-state-description">
+                Agents will appear here when they join rooms or are configured in SIP dispatch rules.
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Active Agent Instances -->
+{% if active_agents %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title">
+            <i class="bi bi-activity"></i> Active Agent Sessions
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Identity</th>
+                        <th>Name</th>
+                        <th>Room</th>
+                        <th>State</th>
+                        <th>Publishing</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for agent in active_agents %}
+                    <tr>
+                        <td>
+                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
+                                {{ agent.identity[:24] }}{% if agent.identity|length > 24 %}...{% endif %}
+                            </code>
+                        </td>
+                        <td>
+                            <strong style="color: var(--text-primary);">{{ agent.name or '-' }}</strong>
+                        </td>
+                        <td>
+                            <a href="/rooms/{{ agent.room }}" style="color: var(--primary);">{{ agent.room }}</a>
+                        </td>
+                        <td>
+                            {% if agent.state == 1 %}
+                            <span class="badge bg-success">JOINED</span>
+                            {% elif agent.state == 2 %}
+                            <span class="badge bg-warning text-dark">ACTIVE</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ agent.state }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if agent.is_publishing %}
+                            <span class="badge bg-info">Yes</span>
+                            {% else %}
+                            <span class="text-muted">No</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Dispatch Agent Modal -->
+<div class="modal fade" id="dispatchAgentModal" tabindex="-1" aria-labelledby="dispatchAgentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="/agents/dispatch">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dispatchAgentModalLabel">
+                        <i class="bi bi-robot"></i> Dispatch Agent to Room
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="agent_name" class="form-label">Agent Name</label>
+                        <input type="text" class="form-control" id="agent_name" name="agent_name" required placeholder="e.g., my-agent">
+                        <small class="form-text text-muted">The registered name of your agent worker</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="room_name" class="form-label">Room Name</label>
+                        {% if rooms %}
+                        <select class="form-select" id="room_name" name="room_name" required>
+                            <option value="">Select a room...</option>
+                            {% for room in rooms %}
+                            <option value="{{ room.name }}">{{ room.name }} ({{ room.num_participants }} participants)</option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <input type="text" class="form-control" id="room_name" name="room_name" required placeholder="e.g., my-room">
+                        <small class="form-text text-muted">No active rooms. Enter a room name manually.</small>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="metadata" class="form-label">Metadata (Optional)</label>
+                        <textarea class="form-control" id="metadata" name="metadata" rows="2" placeholder="Additional metadata for the agent dispatch"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> Dispatch Agent
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-dismiss flash messages after 5 seconds
+setTimeout(function() {
+    var alerts = document.querySelectorAll('.alert');
+    alerts.forEach(function(alert) {
+        var bsAlert = new bootstrap.Alert(alert);
+        bsAlert.close();
+    });
+}, 5000);
+</script>
+{% endblock %}
