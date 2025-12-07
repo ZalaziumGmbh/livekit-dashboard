@@ -684,8 +684,9 @@ class LiveKitClient:
 
         if name is not None:
             update.name = name
-        if trunk_ids is not None:
-            update.trunk_ids.extend(trunk_ids)
+        if trunk_ids is not None and trunk_ids:
+            # ListUpdate uses .set to replace the entire list
+            update.trunk_ids.set.extend(trunk_ids)
         if metadata is not None:
             update.metadata = metadata
         if attributes is not None:
