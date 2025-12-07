@@ -650,7 +650,10 @@ class LiveKitClient:
                 agent_name=agent_name,
                 metadata=agent_metadata or "",
             )
-            req.room_config = api.RoomConfiguration(agents=[agent_dispatch])
+            # Use CopyFrom for protobuf message field assignment
+            room_config = api.RoomConfiguration()
+            room_config.agents.append(agent_dispatch)
+            req.room_config.CopyFrom(room_config)
 
         return await lk.sip.create_dispatch_rule(req)
 

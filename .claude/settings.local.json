@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m poetry:*)",
+      "Bash(python -m pip:*)",
+      "Bash(python:*)",
+      "Bash(xargs cat:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
