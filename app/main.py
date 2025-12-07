@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.routes import overview, rooms, egress, sip, settings, sandbox, auth, agents
+from app.routes import overview, sip, settings, auth, agents
 from app.security.csrf import get_csrf_token
 
 
@@ -87,14 +87,11 @@ app.state.templates = templates
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-# Include routers
+# Include routers (SIP telephony focused)
 app.include_router(overview.router, tags=["Overview"])
-app.include_router(rooms.router, tags=["Rooms"])
-app.include_router(egress.router, tags=["Egress"])
 app.include_router(sip.router, tags=["SIP"])
 app.include_router(agents.router, tags=["Agents"])
 app.include_router(settings.router, tags=["Settings"])
-app.include_router(sandbox.router, tags=["Sandbox"])
 app.include_router(auth.router, tags=["Auth"])
 
 
@@ -137,15 +134,9 @@ async def add_security_headers(request: Request, call_next):
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """Custom 404 page"""
-    return templates.TemplateResponse(
-        "base.html.j2",
-        {
-            "request": request,
-            "error": "Page not found",
-        },
-        status_code=404,
-    )
+    """Redirect 404 to home page"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 
 @app.exception_handler(500)

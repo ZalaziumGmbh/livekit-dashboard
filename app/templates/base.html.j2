@@ -38,20 +38,12 @@
                     <i class="bi bi-speedometer2"></i>
                     Overview
                 </a>
-                <a href="/rooms" class="nav-link {% if '/rooms' in request.url.path %}active{% endif %}">
-                    <i class="bi bi-door-open"></i>
-                    Rooms
-                </a>
-                <a href="/egress" class="nav-link {% if '/egress' in request.url.path %}active{% endif %}">
-                    <i class="bi bi-record-circle"></i>
-                    Egress
-                </a>
                 <a href="/agents" class="nav-link {% if '/agents' in request.url.path %}active{% endif %}">
                     <i class="bi bi-robot"></i>
                     Agents
                 </a>
             </div>
-            
+
             {% if sip_enabled %}
             <div class="nav-section">
                 <div class="nav-section-title">Telephony</div>
@@ -65,13 +57,8 @@
                 </a>
             </div>
             {% endif %}
-            
+
             <div class="nav-section">
-                <div class="nav-section-title">Tools</div>
-                <a href="/sandbox" class="nav-link {% if '/sandbox' in request.url.path %}active{% endif %}">
-                    <i class="bi bi-key"></i>
-                    Token Generator
-                </a>
                 <a href="/settings" class="nav-link {% if '/settings' in request.url.path %}active{% endif %}">
                     <i class="bi bi-gear"></i>
                     Settings

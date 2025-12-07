@@ -82,7 +82,6 @@
                                         data-trunk-address="{{ trunk.address or trunk.outbound_address or '' }}"
                                         data-trunk-transport="{% if trunk.transport %}{{ trunk.transport|string|lower }}{% else %}tcp{% endif %}"
                                         data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
-                                        data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
                                         data-trunk-auth-username="{{ trunk.auth_username or '' }}"
                                         data-trunk-media-encryption="{{ trunk.media_encryption or '' }}"
                                         data-trunk-include-headers="{{ trunk.include_headers or '' }}"
@@ -319,6 +318,7 @@
                                         <small class="text-muted">Custom SIP headers as JSON object (e.g., {"X-Custom": "value"})</small>
                                     </div>
 
+                                    <div class="form-group">
                                         <label for="headers_to_attributes" class="form-label">
                                             Headers to Attributes Mapping
                                             <i class="bi bi-info-circle text-muted" title="Map SIP headers to participant attributes"></i>
@@ -500,6 +500,7 @@
                                         <small class="text-muted">Custom SIP headers as JSON object (e.g., {"X-Custom": "value"})</small>
                                     </div>
 
+                                    <div class="form-group">
                                         <label for="update_headers_to_attributes" class="form-label">
                                             Headers to Attributes Mapping
                                             <i class="bi bi-info-circle text-muted" title="Map SIP headers to participant attributes"></i>
