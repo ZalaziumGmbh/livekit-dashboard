@@ -3,6 +3,7 @@
 import asyncio
 import os
 import time
+from datetime import timedelta
 from typing import List, Optional, Tuple, Dict, Any
 
 from livekit import api, rtc
@@ -193,7 +194,7 @@ class LiveKitClient:
             .with_name(name or identity)
             .with_metadata(metadata)
             .with_grants(grant)
-            .with_ttl(ttl)
+            .with_ttl(timedelta(seconds=ttl))
         )
 
         return token.to_jwt()
@@ -348,6 +349,7 @@ class LiveKitClient:
         if headers:
             for key, value in headers.items():
                 trunk_info.headers[key] = value
+        if headers_to_attributes:
             for key, value in headers_to_attributes.items():
                 trunk_info.headers_to_attributes[key] = value
 
@@ -679,30 +681,25 @@ class LiveKitClient:
 
         lk = await self._get_api()
 
-        # Build update object
-        update = api.SIPDispatchRuleUpdate()
+        # Build SIPDispatchRuleInfo (similar pattern to trunk updates)
+        rule_info = api.SIPDispatchRuleInfo(sip_dispatch_rule_id=sip_dispatch_rule_id)
 
         if name is not None:
-            update.name = name
+            rule_info.name = name
         if trunk_ids is not None and trunk_ids:
-            # ListUpdate uses .set to replace the entire list
-            update.trunk_ids.set.extend(trunk_ids)
+            rule_info.trunk_ids.extend(trunk_ids)
         if metadata is not None:
-            update.metadata = metadata
+            rule_info.metadata = metadata
         if attributes is not None:
             for key, value in attributes.items():
-                update.attributes[key] = value
+                rule_info.attributes[key] = value
 
         # Handle rule (room_name, pin, etc)
         if room_name is not None or pin is not None or rule_type is not None or room_prefix is not None or randomize is not None:
             rule = api.SIPDispatchRule()
-            
-            # If rule_type is provided, switch type
-            # If not, we might need to know the current type, but for now let's assume if they provide room_prefix they want individual/callee
-            
-            target_type = rule_type or "direct" # Default to direct if not specified, but this logic might be flawed if updating existing.
-            # However, in partial update, we usually replace the whole rule oneof.
-            
+
+            target_type = rule_type or "direct"
+
             if target_type == "individual":
                 if room_prefix is not None:
                     rule.dispatch_rule_individual.room_prefix = room_prefix
@@ -721,33 +718,20 @@ class LiveKitClient:
                     rule.dispatch_rule_direct.room_name = room_name
                 if pin is not None:
                     rule.dispatch_rule_direct.pin = pin
-            
-            update.rule.CopyFrom(rule)
+
+            rule_info.rule.CopyFrom(rule)
 
         # Add agent configuration if provided
         if agent_name is not None:
-            # Note: SIPDispatchRuleUpdate doesn't seem to have room_config based on inspection
-            # But let's check if it has it. Inspection said:
-            # ['trunk_ids', 'rule', 'name', 'metadata', 'attributes', 'media_encryption']
-            # It does NOT have room_config.
-            # So we might not be able to update agent config via this method if it's missing.
-            # However, CreateSIPDispatchRuleRequest has it.
-            # Maybe we need to use 'replace' with SIPDispatchRuleInfo if we want to update agent?
-            # SIPDispatchRuleInfo has room_config.
-            
-            # If we want to support agent update, we might need to use 'replace'.
-            # But 'replace' requires full object.
-            
-            # For now, let's comment out agent update if it's not supported in partial update
-            # OR check if I missed it in inspection.
-            pass
+            agent_dispatch = api.RoomAgentDispatch(
+                agent_name=agent_name,
+                metadata=agent_metadata or "",
+            )
+            room_config = api.RoomConfiguration()
+            room_config.agents.append(agent_dispatch)
+            rule_info.room_config.CopyFrom(room_config)
 
-        req = api.UpdateSIPDispatchRuleRequest(
-            sip_dispatch_rule_id=sip_dispatch_rule_id,
-            update=update
-        )
-
-        return await lk.sip.update_dispatch_rule(req)
+        return await lk.sip.update_dispatch_rule(rule_id=sip_dispatch_rule_id, rule=rule_info)
 
     async def delete_sip_dispatch_rule(self, sip_dispatch_rule_id: str):
         """Delete a SIP dispatch rule"""
@@ -863,30 +847,6 @@ class LiveKitClient:
             import traceback
             traceback.print_exc()
             return []
-
-    async def get_agent_analytics(self) -> Dict[str, Any]:
-        """Get agent analytics summary"""
-        try:
-            agents = await self.get_all_agents()
-
-            total_agents = len(agents)
-            running_agents = len([a for a in agents if a['status'] == 'RUNNING'])
-            total_sessions = sum(a.get('concurrent_sessions', 0) for a in agents)
-
-            return {
-                'agents_deployed': total_agents,
-                'concurrent_sessions': total_sessions,
-                'running_agents': running_agents,
-                'agents': agents,
-            }
-        except Exception as e:
-            print(f"Error getting agent analytics: {e}")
-            return {
-                'agents_deployed': 0,
-                'concurrent_sessions': 0,
-                'running_agents': 0,
-                'agents': [],
-            }
 
     async def create_agent_dispatch(
         self,
@@ -1475,42 +1435,6 @@ class LiveKitClient:
                 stats_dict["subscriber_stats"].append(stat_info)
         
         return stats_dict, latency
-
-    # Agent Management
-    async def list_agent_dispatches(self, room_name: Optional[str] = None) -> List:
-        """List agent dispatches, optionally filtered by room"""
-        try:
-            lk = await self._get_api()
-            req = api.ListAgentDispatchRequest(room=room_name or "")
-            resp = await lk.agent_dispatch.list_dispatch(req)
-            return list(resp.agent_dispatches) if hasattr(resp, "agent_dispatches") else []
-        except Exception as e:
-            print(f"Error listing agent dispatches: {e}")
-            return []
-
-    async def create_agent_dispatch(
-        self,
-        room_name: str,
-        agent_name: str,
-        metadata: Optional[str] = None,
-    ):
-        """Create an agent dispatch to spawn an agent in a room"""
-        lk = await self._get_api()
-        req = api.CreateAgentDispatchRequest(
-            room=room_name,
-            agent_name=agent_name,
-            metadata=metadata or "",
-        )
-        return await lk.agent_dispatch.create_dispatch(req)
-
-    async def delete_agent_dispatch(self, dispatch_id: str, room_name: str):
-        """Delete an agent dispatch"""
-        lk = await self._get_api()
-        req = api.DeleteAgentDispatchRequest(
-            dispatch_id=dispatch_id,
-            room=room_name,
-        )
-        return await lk.agent_dispatch.delete_dispatch(req)
 
     async def get_agents_in_rooms(self) -> List[Dict[str, Any]]:
         """Get all agents currently active in rooms by checking participants"""
