@@ -22,8 +22,8 @@ class LiveKitClient:
         # Don't create the API instance here - do it lazily in async context
         self._lk_api = None
 
-        # SIP is optional
-        self.sip_enabled = os.environ.get("ENABLE_SIP", "false").lower() == "true"
+        # SIP is enabled by default (matches docker-compose default)
+        self.sip_enabled = os.environ.get("ENABLE_SIP", "true").lower() == "true"
 
     async def _get_api(self):
         """Get or create LiveKit API instance in async context"""
