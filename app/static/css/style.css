@@ -823,6 +823,36 @@ pre, code {
     background-color: var(--bg-tertiary);
 }
 
+/* Override Bootstrap bg-light in dark theme for JSON examples */
+.bg-light {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+.bg-light pre,
+.bg-light code,
+pre.bg-light,
+pre.bg-light code {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+/* JSON textarea styling for better visibility */
+textarea.font-monospace {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+/* Form help text styling */
+.form-text {
+    color: var(--text-muted) !important;
+}
+
+.form-text strong {
+    color: var(--text-secondary) !important;
+}
+
 /* Bootstrap modal fixes */
 .modal-content, .modal-header, .modal-body, .modal-footer {
     color: var(--text-primary);

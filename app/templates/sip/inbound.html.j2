@@ -1168,61 +1168,58 @@ function clearTrunkTags(isEdit) {
 function updateDispatchRuleFields(isEdit) {
     var prefix = isEdit ? 'edit_' : '';
     var typeSelect = document.getElementById(prefix + 'dispatch_rule_type');
-    
+
     if (!typeSelect) return;
-    
+
     var selectedType = typeSelect.value;
-    
+
     // Get all field containers
     var directFields = document.getElementById(prefix + 'direct_rule_fields');
     var individualFields = document.getElementById(prefix + 'individual_rule_fields');
     var calleeFields = document.getElementById(prefix + 'callee_rule_fields');
     var calleeRandomizeFields = document.getElementById(prefix + 'callee_randomize_fields');
     var pinFields = document.getElementById(prefix + 'pin_fields');
-    
-    // Sync room_prefix values between individual and callee fields before hiding
-    if (isEdit) {
-        var individualPrefixField = document.getElementById('edit_room_prefix');
-        var calleePrefixField = document.getElementById('edit_callee_room_prefix');
-        if (individualPrefixField && calleePrefixField) {
-            // Sync values when switching types
-            if (selectedType === 'individual' && calleePrefixField.value) {
-                individualPrefixField.value = calleePrefixField.value;
-            } else if (selectedType === 'callee' && individualPrefixField.value) {
-                calleePrefixField.value = individualPrefixField.value;
-            }
-        }
-    } else {
-        var individualPrefixField = document.getElementById('room_prefix');
-        var calleePrefixField = document.getElementById('callee_room_prefix');
-        if (individualPrefixField && calleePrefixField) {
-            // Sync values when switching types
-            if (selectedType === 'individual' && calleePrefixField.value) {
-                individualPrefixField.value = calleePrefixField.value;
-            } else if (selectedType === 'callee' && individualPrefixField.value) {
-                calleePrefixField.value = individualPrefixField.value;
-            }
+
+    // Get the room_prefix input fields
+    var individualPrefixField = document.getElementById(isEdit ? 'edit_room_prefix' : 'room_prefix');
+    var calleePrefixField = document.getElementById(isEdit ? 'edit_callee_room_prefix' : 'callee_room_prefix');
+    var roomNameField = document.getElementById(isEdit ? 'edit_room_name' : 'room_name');
+
+    // Sync room_prefix values between individual and callee fields when switching types
+    if (individualPrefixField && calleePrefixField) {
+        if (selectedType === 'individual' && calleePrefixField.value && !individualPrefixField.value) {
+            individualPrefixField.value = calleePrefixField.value;
+        } else if (selectedType === 'callee' && individualPrefixField.value && !calleePrefixField.value) {
+            calleePrefixField.value = individualPrefixField.value;
         }
     }
-    
+
     // Hide all fields first
     if (directFields) directFields.style.display = 'none';
     if (individualFields) individualFields.style.display = 'none';
     if (calleeFields) calleeFields.style.display = 'none';
     if (calleeRandomizeFields) calleeRandomizeFields.style.display = 'none';
     if (pinFields) pinFields.style.display = 'none';
-    
-    // Show fields based on selected type
+
+    // Disable all room name/prefix fields first (so hidden fields don't get submitted)
+    if (roomNameField) roomNameField.disabled = true;
+    if (individualPrefixField) individualPrefixField.disabled = true;
+    if (calleePrefixField) calleePrefixField.disabled = true;
+
+    // Show and enable fields based on selected type
     if (selectedType === 'direct') {
         if (directFields) directFields.style.display = 'block';
         if (pinFields) pinFields.style.display = 'block';
+        if (roomNameField) roomNameField.disabled = false;
     } else if (selectedType === 'individual') {
         if (individualFields) individualFields.style.display = 'block';
         if (pinFields) pinFields.style.display = 'block';
+        if (individualPrefixField) individualPrefixField.disabled = false;
     } else if (selectedType === 'callee') {
         if (calleeFields) calleeFields.style.display = 'block';
         if (calleeRandomizeFields) calleeRandomizeFields.style.display = 'block';
         if (pinFields) pinFields.style.display = 'block';
+        if (calleePrefixField) calleePrefixField.disabled = false;
     }
 }
 
@@ -1330,22 +1327,59 @@ function buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, rand
 
 // Edit Rule
 function editRule(ruleId, name, trunkIds, dispatchRuleType, roomNameOrPrefix, pin, hidePhoneNumber, metadata, agentName, agentMetadata, roomPrefix, randomize, buttonElement) {
-    // Get server JSON from data attribute (base64 encoded)
+    // Get server JSON from data attribute (base64 encoded) - this is the most reliable source
     var serverRuleJson = '';
+    var parsedJson = null;
     if (buttonElement && buttonElement.getAttribute) {
         var ruleJsonB64 = buttonElement.getAttribute('data-rule-json') || '';
         if (ruleJsonB64) {
             try {
                 // Decode base64
                 serverRuleJson = atob(ruleJsonB64);
+                parsedJson = JSON.parse(serverRuleJson);
             } catch (e) {
-                console.warn('Failed to decode rule JSON:', e);
+                console.warn('Failed to decode/parse rule JSON:', e);
             }
         }
     }
+
+    // Extract values from server JSON if available (more reliable than template extraction)
+    if (parsedJson) {
+        // Get rule type and values from parsed JSON
+        if (parsedJson.rule) {
+            if (parsedJson.rule.dispatch_rule_direct) {
+                dispatchRuleType = 'direct';
+                roomNameOrPrefix = parsedJson.rule.dispatch_rule_direct.room_name || '';
+                pin = parsedJson.rule.dispatch_rule_direct.pin || '';
+            } else if (parsedJson.rule.dispatch_rule_individual) {
+                dispatchRuleType = 'individual';
+                roomPrefix = parsedJson.rule.dispatch_rule_individual.room_prefix || '';
+                roomNameOrPrefix = roomPrefix;
+                pin = parsedJson.rule.dispatch_rule_individual.pin || '';
+            } else if (parsedJson.rule.dispatch_rule_callee) {
+                dispatchRuleType = 'callee';
+                roomPrefix = parsedJson.rule.dispatch_rule_callee.room_prefix || '';
+                roomNameOrPrefix = roomPrefix;
+                pin = parsedJson.rule.dispatch_rule_callee.pin || '';
+                randomize = parsedJson.rule.dispatch_rule_callee.randomize || false;
+            }
+        }
+        // Get other fields from JSON
+        name = parsedJson.name || name || '';
+        trunkIds = parsedJson.trunk_ids ? parsedJson.trunk_ids.join(',') : trunkIds || '';
+        hidePhoneNumber = parsedJson.hide_phone_number || false;
+        metadata = parsedJson.metadata || '';
+
+        // Get agent info from JSON
+        if (parsedJson.room_config && parsedJson.room_config.agents && parsedJson.room_config.agents.length > 0) {
+            agentName = parsedJson.room_config.agents[0].agent_name || '';
+            agentMetadata = parsedJson.room_config.agents[0].metadata || '';
+        }
+    }
+
     document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('edit_rule_name').value = name || '';
-    
+
     // Clear and populate trunk tags
     clearTrunkTags(true);
     if (trunkIds) {
@@ -1360,15 +1394,15 @@ function editRule(ruleId, name, trunkIds, dispatchRuleType, roomNameOrPrefix, pi
             addTrunkTag(trunkId, trunkName, true);
         });
     }
-    
+
     // Set dispatch rule type
     if (dispatchRuleType) {
         document.getElementById('edit_dispatch_rule_type').value = dispatchRuleType;
     }
-    
+
     // Update field visibility
     updateDispatchRuleFields(true);
-    
+
     // Set fields based on dispatch rule type
     if (dispatchRuleType === 'direct') {
         document.getElementById('edit_room_name').value = roomNameOrPrefix || '';
@@ -1384,32 +1418,24 @@ function editRule(ruleId, name, trunkIds, dispatchRuleType, roomNameOrPrefix, pi
             document.getElementById('edit_randomize').checked = randomize === true || randomize === 'true';
         }
     }
-    
+
     document.getElementById('edit_pin').value = pin || '';
     document.getElementById('edit_hide_phone_number').checked = hidePhoneNumber === true || hidePhoneNumber === 'true';
     document.getElementById('edit_agent_name').value = agentName || '';
     document.getElementById('edit_agent_metadata').value = agentMetadata || '';
     document.getElementById('edit_rule_metadata').value = metadata || '';
-    
-    // Populate JSON from server data if available, otherwise build from form fields
+
+    // Populate JSON textarea
     var ruleJson;
     if (serverRuleJson && serverRuleJson.trim()) {
-        // Use server-provided JSON (more accurate, includes all fields from LiveKit)
-        try {
-            // Parse and re-stringify to ensure valid JSON and proper formatting
-            var parsed = JSON.parse(serverRuleJson);
-            ruleJson = JSON.stringify(parsed, null, 2);
-        } catch (e) {
-            // If parsing fails, fall back to building from form fields
-            console.warn('Failed to parse server JSON, using form fields:', e);
-            ruleJson = buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, randomize, name, trunkIds, hidePhoneNumber, metadata, agentName, agentMetadata);
-        }
+        // Use server-provided JSON (most accurate)
+        ruleJson = JSON.stringify(parsedJson, null, 2);
     } else {
         // Build from form fields
         ruleJson = buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, randomize, name, trunkIds, hidePhoneNumber, metadata, agentName, agentMetadata);
     }
     document.getElementById('edit_plain_json').value = ruleJson;
-    
+
     var modal = new bootstrap.Modal(document.getElementById('editRuleModal'));
     modal.show();
 }
