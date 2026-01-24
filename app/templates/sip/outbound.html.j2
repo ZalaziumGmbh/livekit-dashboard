@@ -49,9 +49,16 @@
                     {% for trunk in trunks %}
                     <tr>
                         <td>
-                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
-                                {{ trunk.sip_trunk_id }}
-                            </code>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
+                                    {{ trunk.sip_trunk_id[:16] }}...
+                                </code>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick="copyTrunkId('{{ trunk.sip_trunk_id }}', this)"
+                                        title="Copy trunk ID">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
                         </td>
                         <td>
                             <strong style="color: var(--text-primary);">{{ trunk.name or 'Unnamed' }}</strong>
@@ -872,6 +879,26 @@
 </style>
 
 <script>
+// Copy trunk ID to clipboard
+function copyTrunkId(trunkId, button) {
+    navigator.clipboard.writeText(trunkId).then(function() {
+        // Show success feedback
+        const originalIcon = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i>';
+        button.classList.remove('btn-outline-secondary');
+        button.classList.add('btn-success');
+
+        setTimeout(function() {
+            button.innerHTML = originalIcon;
+            button.classList.remove('btn-success');
+            button.classList.add('btn-outline-secondary');
+        }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy trunk ID:', err);
+        alert('Failed to copy trunk ID');
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize Create Trunk Modal
     const trunkModalElement = document.getElementById('createTrunkModal');
