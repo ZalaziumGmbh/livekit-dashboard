@@ -1563,16 +1563,39 @@ document.addEventListener('DOMContentLoaded', function() {
     if (createRuleForm) {
         createRuleForm.addEventListener('submit', function(e) {
             updateTrunkIdsHidden(false);
-            // Clear JSON field if user is on form tab (not JSON tab)
-            // Check which tab button is active
+
+            // Check which tab is active (check both class and aria-selected for reliability)
             var createJsonTabButton = document.getElementById('create-json-tab');
-            var isJsonTabActive = createJsonTabButton && createJsonTabButton.classList.contains('active');
-            
+            var isJsonTabActive = createJsonTabButton && (
+                createJsonTabButton.classList.contains('active') ||
+                createJsonTabButton.getAttribute('aria-selected') === 'true'
+            );
+
             if (!isJsonTabActive) {
                 // User is on form tab, clear JSON field so backend uses form fields
                 var jsonField = document.getElementById('plain_json');
                 if (jsonField) {
                     jsonField.value = '';
+                }
+
+                // Ensure the correct room name/prefix field is enabled before submit
+                var dispatchType = document.getElementById('dispatch_rule_type').value;
+                var roomNameField = document.getElementById('room_name');
+                var individualPrefixField = document.getElementById('room_prefix');
+                var calleePrefixField = document.getElementById('callee_room_prefix');
+
+                // Disable all first
+                if (roomNameField) roomNameField.disabled = true;
+                if (individualPrefixField) individualPrefixField.disabled = true;
+                if (calleePrefixField) calleePrefixField.disabled = true;
+
+                // Enable the correct one based on dispatch type
+                if (dispatchType === 'direct' && roomNameField) {
+                    roomNameField.disabled = false;
+                } else if (dispatchType === 'individual' && individualPrefixField) {
+                    individualPrefixField.disabled = false;
+                } else if (dispatchType === 'callee' && calleePrefixField) {
+                    calleePrefixField.disabled = false;
                 }
             }
         });
@@ -1582,16 +1605,39 @@ document.addEventListener('DOMContentLoaded', function() {
     if (editRuleForm) {
         editRuleForm.addEventListener('submit', function(e) {
             updateTrunkIdsHidden(true);
-            // Clear JSON field if user is on form tab (not JSON tab)
-            // Check which tab button is active
+
+            // Check which tab is active (check both class and aria-selected for reliability)
             var editJsonTabButton = document.getElementById('edit-json-tab');
-            var isJsonTabActive = editJsonTabButton && editJsonTabButton.classList.contains('active');
-            
+            var isJsonTabActive = editJsonTabButton && (
+                editJsonTabButton.classList.contains('active') ||
+                editJsonTabButton.getAttribute('aria-selected') === 'true'
+            );
+
             if (!isJsonTabActive) {
                 // User is on form tab, clear JSON field so backend uses form fields
                 var jsonField = document.getElementById('edit_plain_json');
                 if (jsonField) {
                     jsonField.value = '';
+                }
+
+                // Ensure the correct room name/prefix field is enabled before submit
+                var dispatchType = document.getElementById('edit_dispatch_rule_type').value;
+                var roomNameField = document.getElementById('edit_room_name');
+                var individualPrefixField = document.getElementById('edit_room_prefix');
+                var calleePrefixField = document.getElementById('edit_callee_room_prefix');
+
+                // Disable all first
+                if (roomNameField) roomNameField.disabled = true;
+                if (individualPrefixField) individualPrefixField.disabled = true;
+                if (calleePrefixField) calleePrefixField.disabled = true;
+
+                // Enable the correct one based on dispatch type
+                if (dispatchType === 'direct' && roomNameField) {
+                    roomNameField.disabled = false;
+                } else if (dispatchType === 'individual' && individualPrefixField) {
+                    individualPrefixField.disabled = false;
+                } else if (dispatchType === 'callee' && calleePrefixField) {
+                    calleePrefixField.disabled = false;
                 }
             }
         });
