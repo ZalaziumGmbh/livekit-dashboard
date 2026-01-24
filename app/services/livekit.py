@@ -356,33 +356,46 @@ class LiveKitClient:
             # Determine rule type for each rule and wrap
             wrapped_rules = []
             for rule in rules:
-                rule_type = "unknown"
+                rule_type = "direct"  # Default to direct
                 if hasattr(rule, "rule") and rule.rule:
                     rule_obj = rule.rule
-                    # Determine which rule type is set using HasField for protobuf oneof
+                    detected = False
+
+                    # Method 1: Use HasField for protobuf oneof (most reliable)
                     if hasattr(rule_obj, "HasField"):
-                        if rule_obj.HasField("dispatch_rule_direct"):
-                            rule_type = "direct"
-                        elif rule_obj.HasField("dispatch_rule_individual"):
-                            rule_type = "individual"
-                        elif rule_obj.HasField("dispatch_rule_callee"):
-                            rule_type = "callee"
-                    # Fallback: check if attribute exists and is not None/empty
-                    elif (
-                        hasattr(rule_obj, "dispatch_rule_direct")
-                        and rule_obj.dispatch_rule_direct is not None
-                    ):
-                        rule_type = "direct"
-                    elif (
-                        hasattr(rule_obj, "dispatch_rule_individual")
-                        and rule_obj.dispatch_rule_individual is not None
-                    ):
-                        rule_type = "individual"
-                    elif (
-                        hasattr(rule_obj, "dispatch_rule_callee")
-                        and rule_obj.dispatch_rule_callee is not None
-                    ):
-                        rule_type = "callee"
+                        try:
+                            if rule_obj.HasField("dispatch_rule_individual"):
+                                rule_type = "individual"
+                                detected = True
+                            elif rule_obj.HasField("dispatch_rule_callee"):
+                                rule_type = "callee"
+                                detected = True
+                            elif rule_obj.HasField("dispatch_rule_direct"):
+                                rule_type = "direct"
+                                detected = True
+                        except ValueError:
+                            pass  # HasField failed, try content check
+
+                    # Method 2: Fallback - check which rule type has actual content
+                    if not detected:
+                        # Check individual first (has room_prefix)
+                        if hasattr(rule_obj, "dispatch_rule_individual"):
+                            ind = rule_obj.dispatch_rule_individual
+                            if ind and hasattr(ind, "room_prefix") and ind.room_prefix:
+                                rule_type = "individual"
+                                detected = True
+                        # Check callee (has room_prefix)
+                        if not detected and hasattr(rule_obj, "dispatch_rule_callee"):
+                            cal = rule_obj.dispatch_rule_callee
+                            if cal and hasattr(cal, "room_prefix") and cal.room_prefix:
+                                rule_type = "callee"
+                                detected = True
+                        # Check direct (has room_name)
+                        if not detected and hasattr(rule_obj, "dispatch_rule_direct"):
+                            dir_rule = rule_obj.dispatch_rule_direct
+                            if dir_rule and hasattr(dir_rule, "room_name") and dir_rule.room_name:
+                                rule_type = "direct"
+                                detected = True
 
                 # Convert rule to JSON and encode as base64 for safe HTML attribute storage
                 rule_json = self._rule_to_json(rule)
