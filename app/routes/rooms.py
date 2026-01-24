@@ -17,6 +17,8 @@ async def rooms_index(
     request: Request,
     search: Optional[str] = None,
     partial: Optional[str] = None,
+    flash_message: Optional[str] = None,
+    flash_type: Optional[str] = None,
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """List all rooms with optional search"""
@@ -37,6 +39,8 @@ async def rooms_index(
         "current_user": current_user,
         "sip_enabled": lk.sip_enabled,
         "csrf_token": get_csrf_token(request),
+        "flash_message": flash_message,
+        "flash_type": flash_type or "info",
     }
 
     # Return partial template for HTMX polling
@@ -284,3 +288,67 @@ async def get_room_rtc_stats(
             "error": str(e),
             "room_name": room_name
         }
+
+
+@router.post("/rooms/cleanup-orphaned", dependencies=[Depends(requires_admin)])
+async def cleanup_orphaned_rooms(
+    request: Request,
+    csrf_token: str = Form(...),
+    lk: LiveKitClient = Depends(get_livekit_client),
+):
+    """Delete rooms that have only SIP participants (no agents connected)"""
+    await verify_csrf_token(request)
+
+    try:
+        rooms, _ = await lk.list_rooms()
+        deleted_count = 0
+        deleted_rooms = []
+
+        for room in rooms:
+            participants = await lk.list_participants(room.name)
+
+            # Check if room has any agent participants
+            has_agent = False
+            has_sip = False
+
+            for participant in participants:
+                kind = getattr(participant, 'kind', 0)
+                # Handle both enum and int
+                kind_value = int(kind) if hasattr(kind, '__int__') else kind
+                if kind_value == 4:  # AGENT
+                    has_agent = True
+                    break
+                elif kind_value == 3:  # SIP
+                    has_sip = True
+
+            # Delete room if it has SIP participants but no agents
+            if has_sip and not has_agent:
+                try:
+                    await lk.delete_room(room.name)
+                    deleted_count += 1
+                    deleted_rooms.append(room.name)
+                except Exception as e:
+                    print(f"Error deleting room {room.name}: {e}")
+
+        if deleted_count > 0:
+            from urllib.parse import quote
+            msg = quote(f"Cleaned up {deleted_count} orphaned room(s)")
+            return RedirectResponse(
+                url=f"/rooms?flash_message={msg}&flash_type=success",
+                status_code=303
+            )
+        else:
+            from urllib.parse import quote
+            msg = quote("No orphaned rooms found")
+            return RedirectResponse(
+                url=f"/rooms?flash_message={msg}&flash_type=info",
+                status_code=303
+            )
+    except Exception as e:
+        print(f"Error cleaning up orphaned rooms: {e}")
+        from urllib.parse import quote
+        msg = quote(f"Error: {str(e)}")
+        return RedirectResponse(
+            url=f"/rooms?flash_message={msg}&flash_type=danger",
+            status_code=303
+        )

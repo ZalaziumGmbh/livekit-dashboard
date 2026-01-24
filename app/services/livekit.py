@@ -1720,18 +1720,13 @@ class LiveKitClient:
             rooms, _ = await self.list_rooms()
             agents = []
 
-            print(f"DEBUG get_agents_in_rooms: Found {len(rooms)} rooms")
-
             for room in rooms:
                 participants = await self.list_participants(room.name)
-                print(f"DEBUG get_agents_in_rooms: Room '{room.name}' has {len(participants)} participants")
 
                 for participant in participants:
                     # Check if participant is an agent
                     # ParticipantInfo.Kind: STANDARD=0, INGRESS=1, EGRESS=2, SIP=3, AGENT=4
                     kind = getattr(participant, 'kind', None)
-                    print(f"DEBUG get_agents_in_rooms: Participant '{participant.identity}' kind={kind} (type={type(kind).__name__})")
-
                     is_agent = False
 
                     if kind is not None:
@@ -1751,8 +1746,6 @@ class LiveKitClient:
                             elif isinstance(kind, int):
                                 is_agent = kind == 4
 
-                    print(f"DEBUG get_agents_in_rooms: is_agent={is_agent}")
-
                     if is_agent:
                         agents.append({
                             "identity": participant.identity,
@@ -1764,12 +1757,9 @@ class LiveKitClient:
                             "is_publishing": getattr(participant, 'is_publishing', False),
                         })
 
-            print(f"DEBUG get_agents_in_rooms: Total agents found: {len(agents)}")
             return agents
         except Exception as e:
             print(f"Error getting agents in rooms: {e}")
-            import traceback
-            traceback.print_exc()
             return []
 
     async def get_configured_agents(self) -> List[Dict[str, Any]]:
@@ -1856,7 +1846,21 @@ class LiveKitClient:
             }
 
 
-# Dependency injection helper
+# Singleton instance for the LiveKit client
+_livekit_client_instance: Optional[LiveKitClient] = None
+
+
 def get_livekit_client() -> LiveKitClient:
-    """FastAPI dependency to get LiveKit client"""
-    return LiveKitClient()
+    """FastAPI dependency to get LiveKit client (singleton)"""
+    global _livekit_client_instance
+    if _livekit_client_instance is None:
+        _livekit_client_instance = LiveKitClient()
+    return _livekit_client_instance
+
+
+async def close_livekit_client():
+    """Close the singleton LiveKit client - call on app shutdown"""
+    global _livekit_client_instance
+    if _livekit_client_instance is not None:
+        await _livekit_client_instance.close()
+        _livekit_client_instance = None

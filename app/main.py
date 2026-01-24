@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.routes import overview, sip, settings, auth, agents
 from app.security.csrf import get_csrf_token
+from app.services.livekit import close_livekit_client
 
 
 @asynccontextmanager
@@ -42,6 +43,10 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     print("👋 LiveKit Dashboard shutting down...")
+
+    # Close LiveKit client to prevent unclosed session warnings
+    await close_livekit_client()
+    print("✅ LiveKit client closed")
 
 
 # Create FastAPI app
