@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import time
+from datetime import timedelta
 from typing import List, Optional, Tuple, Dict, Any
 
 from livekit import api, rtc
@@ -197,7 +198,7 @@ class LiveKitClient:
             .with_name(name or identity)
             .with_metadata(metadata)
             .with_grants(grant)
-            .with_ttl(ttl)
+            .with_ttl(timedelta(seconds=ttl))
         )
 
         return token.to_jwt()
