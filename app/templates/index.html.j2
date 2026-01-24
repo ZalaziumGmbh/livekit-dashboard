@@ -185,7 +185,7 @@
             <div class="col-md-6">
                 <p class="mb-2">
                     <strong>LiveKit URL:</strong>
-                    <code>{{ server_info.    or 'Not configured' }}</code>
+                    <code>{{ server_info.url or 'Not configured' }}</code>
                 </p>
                 <p class="mb-0">
                     <strong>Status:</strong>
@@ -203,7 +203,7 @@
                 </p>
                 <p class="mb-0">
                     <strong>API Latency:</strong>
-                    {{ server_info.latency_ms or '?' }} ms
+                    {{ server_info.sdk_latency_ms or '?' }} ms
                 </p>
             </div>
         </div>
