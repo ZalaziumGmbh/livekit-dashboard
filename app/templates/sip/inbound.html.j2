@@ -248,7 +248,7 @@
                             <div class="btn-group btn-group-sm" role="group">
                                 {% set rule_obj = rule.rule if rule.rule else none %}
                                 {% set rule_type = rule.rule_type if rule.rule_type else 'direct' %}
-                                {# Extract values based on rule_type for more reliable data extraction #}
+                                {# Extract values based on rule_type #}
                                 {% set randomize_value = 'false' %}
                                 {% set room_name_or_prefix = '' %}
                                 {% set pin_value = '' %}

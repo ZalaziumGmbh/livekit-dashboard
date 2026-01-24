@@ -76,16 +76,25 @@
                         </td>
                         <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-primary btn-sm edit-trunk-btn" 
+                                {# Normalize transport enum value to simple string #}
+                                {% set t_raw = trunk.transport|string|lower if trunk.transport else '' %}
+                                {% set t_val = 'udp' if ('udp' in t_raw or t_raw == '1') else ('tls' if ('tls' in t_raw or t_raw == '3') else 'tcp') %}
+                                {# Normalize media_encryption enum value #}
+                                {% set me_raw = trunk.media_encryption|string|lower if trunk.media_encryption else '' %}
+                                {% set me_val = 'disabled' if 'disabled' in me_raw else ('optional' if 'optional' in me_raw else ('required' if 'required' in me_raw else '')) %}
+                                {# Normalize include_headers enum value #}
+                                {% set ih_raw = trunk.include_headers|string|lower if trunk.include_headers else '' %}
+                                {% set ih_val = 'no_headers' if 'no_headers' in ih_raw else ('all_headers' if 'all_headers' in ih_raw else '') %}
+                                <button type="button" class="btn btn-outline-primary btn-sm edit-trunk-btn"
                                         data-trunk-id="{{ trunk.sip_trunk_id }}"
                                         data-trunk-name="{{ trunk.name or '' }}"
                                         data-trunk-address="{{ trunk.address or trunk.outbound_address or '' }}"
-                                        data-trunk-transport="{% if trunk.transport %}{% set t = trunk.transport|string|lower %}{% if 'udp' in t %}udp{% elif 'tls' in t %}tls{% else %}tcp{% endif %}{% else %}tcp{% endif %}"
+                                        data-trunk-transport="{{ t_val }}"
                                         data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
                                         data-trunk-auth-username="{{ trunk.auth_username or '' }}"
-                                        data-trunk-media-encryption="{{ trunk.media_encryption or '' }}"
-                                        data-trunk-include-headers="{{ trunk.include_headers or '' }}"
-                                        data-bs-toggle="modal" 
+                                        data-trunk-media-encryption="{{ me_val }}"
+                                        data-trunk-include-headers="{{ ih_val }}"
+                                        data-bs-toggle="modal"
                                         data-bs-target="#updateTrunkModal"
                                         title="Edit trunk">
                                     <i class="bi bi-pencil"></i>
