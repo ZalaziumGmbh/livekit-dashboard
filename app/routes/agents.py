@@ -17,6 +17,7 @@ async def agents_index(
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """List agents configured in SIP dispatch rules"""
+    print(f"DEBUG agents_index: sip_enabled = {lk.sip_enabled}")
     # Get configured agents from SIP dispatch rules
     configured_agents = await lk.get_configured_agents()
 

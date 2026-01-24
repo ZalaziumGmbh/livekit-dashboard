@@ -1329,6 +1329,7 @@ class LiveKitClient:
 
             return {
                 "status": "healthy",
+                "is_connected": True,
                 "rooms_count": len(rooms),
                 "participants_count": total_participants,
                 "sdk_latency_ms": round(latency * 1000, 2),
@@ -1338,6 +1339,7 @@ class LiveKitClient:
         except Exception as e:
             return {
                 "status": "error",
+                "is_connected": False,
                 "error": str(e),
                 "url": self.url,
             }

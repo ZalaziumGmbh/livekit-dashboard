@@ -193,11 +193,12 @@
                         <td>
                             {% if rule.rule %}
                                 {% set rule_obj = rule.rule %}
-                                {% if rule_obj.dispatch_rule_direct is not none %}
+                                {% set display_rule_type = rule.rule_type if rule.rule_type else 'direct' %}
+                                {% if display_rule_type == 'direct' %}
                                 <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_direct.room_name or '-' }}</span>
-                                {% elif rule_obj.dispatch_rule_individual is not none %}
+                                {% elif display_rule_type == 'individual' %}
                                 <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_individual.room_prefix or '-' }}</span>
-                                {% elif rule_obj.dispatch_rule_callee is not none %}
+                                {% elif display_rule_type == 'callee' %}
                                 <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_callee.room_prefix or '-' }}</span>
                                 {% else %}
                                 <span class="text-muted">-</span>
@@ -209,12 +210,17 @@
                         <td>
                             {% if rule.rule %}
                                 {% set rule_obj = rule.rule %}
-                                {% if rule_obj.dispatch_rule_direct is not none and rule_obj.dispatch_rule_direct.pin %}
-                                <span class="badge badge-secondary">{{ rule_obj.dispatch_rule_direct.pin }}</span>
-                                {% elif rule_obj.dispatch_rule_individual is not none and rule_obj.dispatch_rule_individual.pin %}
-                                <span class="badge badge-secondary">{{ rule_obj.dispatch_rule_individual.pin }}</span>
-                                {% elif rule_obj.dispatch_rule_callee is not none and rule_obj.dispatch_rule_callee.pin %}
-                                <span class="badge badge-secondary">{{ rule_obj.dispatch_rule_callee.pin }}</span>
+                                {% set pin_rule_type = rule.rule_type if rule.rule_type else 'direct' %}
+                                {% set pin_display = '' %}
+                                {% if pin_rule_type == 'direct' and rule_obj.dispatch_rule_direct.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_direct.pin %}
+                                {% elif pin_rule_type == 'individual' and rule_obj.dispatch_rule_individual.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_individual.pin %}
+                                {% elif pin_rule_type == 'callee' and rule_obj.dispatch_rule_callee.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_callee.pin %}
+                                {% endif %}
+                                {% if pin_display %}
+                                <span class="badge badge-secondary">{{ pin_display }}</span>
                                 {% else %}
                                 <span class="text-muted">No PIN</span>
                                 {% endif %}
@@ -244,23 +250,23 @@
                                 {% set rule_type = rule.rule_type if rule.rule_type else 'direct' %}
                                 {# Extract values based on rule_type for more reliable data extraction #}
                                 {% set randomize_value = 'false' %}
-                                {% if rule_type == 'direct' and rule_obj and rule_obj.dispatch_rule_direct is not none %}
-                                    {% set room_name_or_prefix = rule_obj.dispatch_rule_direct.room_name or '' %}
-                                    {% set pin_value = rule_obj.dispatch_rule_direct.pin or '' %}
-                                    {% set room_prefix_value = '' %}
-                                {% elif rule_type == 'individual' and rule_obj and rule_obj.dispatch_rule_individual is not none %}
-                                    {% set room_name_or_prefix = rule_obj.dispatch_rule_individual.room_prefix or '' %}
-                                    {% set pin_value = rule_obj.dispatch_rule_individual.pin or '' %}
-                                    {% set room_prefix_value = rule_obj.dispatch_rule_individual.room_prefix or '' %}
-                                {% elif rule_type == 'callee' and rule_obj and rule_obj.dispatch_rule_callee is not none %}
-                                    {% set room_name_or_prefix = rule_obj.dispatch_rule_callee.room_prefix or '' %}
-                                    {% set pin_value = rule_obj.dispatch_rule_callee.pin or '' %}
-                                    {% set room_prefix_value = rule_obj.dispatch_rule_callee.room_prefix or '' %}
-                                    {% set randomize_value = 'true' if rule_obj.dispatch_rule_callee.randomize else 'false' %}
-                                {% else %}
-                                    {% set room_name_or_prefix = '' %}
-                                    {% set pin_value = '' %}
-                                    {% set room_prefix_value = '' %}
+                                {% set room_name_or_prefix = '' %}
+                                {% set pin_value = '' %}
+                                {% set room_prefix_value = '' %}
+                                {% if rule_obj %}
+                                    {% if rule_type == 'direct' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_direct.room_name or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_direct.pin or '' %}
+                                    {% elif rule_type == 'individual' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_individual.room_prefix or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_individual.pin or '' %}
+                                        {% set room_prefix_value = rule_obj.dispatch_rule_individual.room_prefix or '' %}
+                                    {% elif rule_type == 'callee' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_callee.room_prefix or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_callee.pin or '' %}
+                                        {% set room_prefix_value = rule_obj.dispatch_rule_callee.room_prefix or '' %}
+                                        {% set randomize_value = 'true' if rule_obj.dispatch_rule_callee.randomize else 'false' %}
+                                    {% endif %}
                                 {% endif %}
                                 <button class="btn btn-outline-primary" data-rule-json="{{ rule.rule_json|e if rule.rule_json else '' }}" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule_type }}', '{{ room_name_or_prefix }}', '{{ pin_value }}', {{ 'true' if rule.hide_phone_number else 'false' }}, '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ room_prefix_value }}', {{ randomize_value }}, this)">
                                     <i class="bi bi-pencil"></i>

@@ -80,7 +80,7 @@
                                         data-trunk-id="{{ trunk.sip_trunk_id }}"
                                         data-trunk-name="{{ trunk.name or '' }}"
                                         data-trunk-address="{{ trunk.address or trunk.outbound_address or '' }}"
-                                        data-trunk-transport="{% if trunk.transport %}{{ trunk.transport|string|lower }}{% else %}tcp{% endif %}"
+                                        data-trunk-transport="{% if trunk.transport %}{% set t = trunk.transport|string|lower %}{% if 'udp' in t %}udp{% elif 'tls' in t %}tls{% else %}tcp{% endif %}{% else %}tcp{% endif %}"
                                         data-trunk-numbers="{{ trunk.numbers|join(',') if trunk.numbers else '' }}"
                                         data-trunk-auth-username="{{ trunk.auth_username or '' }}"
                                         data-trunk-media-encryption="{{ trunk.media_encryption or '' }}"
