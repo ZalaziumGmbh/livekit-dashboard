@@ -4,7 +4,13 @@
       "Bash(python -m poetry:*)",
       "Bash(python -m pip:*)",
       "Bash(python:*)",
-      "Bash(xargs cat:*)"
+      "Bash(xargs cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(python3:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(git commit:*)",
+      "Bash(git stash:*)"
     ],
     "deny": [],
     "ask": []
