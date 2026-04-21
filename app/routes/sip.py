@@ -85,8 +85,6 @@ async def create_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
-    media_encryption: Optional[str] = Form(None),
-    include_headers: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -166,8 +164,6 @@ async def update_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
-    media_encryption: Optional[str] = Form(None),
-    include_headers: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -293,7 +289,6 @@ async def sip_inbound_index(
 
     rules = await lk.list_sip_dispatch_rules()
     trunks = await lk.list_sip_inbound_trunks()
-    configured_agents = await lk.get_configured_agents()
     current_user = get_current_user(request)
 
     return request.app.state.templates.TemplateResponse(
@@ -302,7 +297,6 @@ async def sip_inbound_index(
             "request": request,
             "rules": rules,
             "trunks": trunks,
-            "configured_agents": configured_agents,
             "current_user": current_user,
             "sip_enabled": lk.sip_enabled,
             "csrf_token": get_csrf_token(request),
@@ -323,9 +317,6 @@ async def create_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
-    media_encryption: Optional[str] = Form(None),
-    include_headers: Optional[str] = Form(None),
-    krisp_enabled: bool = Form(False),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Create a new SIP inbound trunk"""
@@ -356,9 +347,6 @@ async def create_sip_inbound_trunk(
             auth_username=username,
             auth_password=password,
             metadata=metadata,
-            media_encryption=media_encryption,
-            include_headers=include_headers,
-            krisp_enabled=krisp_enabled,
         )
 
         # Success message
@@ -392,9 +380,6 @@ async def update_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
-    media_encryption: Optional[str] = Form(None),
-    include_headers: Optional[str] = Form(None),
-    krisp_enabled: bool = Form(False),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Update an existing SIP inbound trunk"""
@@ -426,9 +411,6 @@ async def update_sip_inbound_trunk(
             auth_username=username,
             auth_password=password if password else None,
             metadata=metadata,
-            media_encryption=media_encryption,
-            include_headers=include_headers,
-            krisp_enabled=krisp_enabled,
         )
 
         # Success message
@@ -491,14 +473,16 @@ async def create_dispatch_rule(
     csrf_token: str = Form(...),
     rule_name: Optional[str] = Form(None),
     trunk_ids: Optional[str] = Form(None),
+    dispatch_rule_type: str = Form("direct"),
     room_name: Optional[str] = Form(None),
-    pin: Optional[str] = Form(None),
-    rule_type: str = Form("individual"),
     room_prefix: Optional[str] = Form(None),
+    pin: Optional[str] = Form(None),
     randomize: bool = Form(False),
+    hide_phone_number: bool = Form(False),
     agent_name: Optional[str] = Form(None),
     agent_metadata: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    plain_json: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Create a new SIP dispatch rule"""
@@ -516,14 +500,16 @@ async def create_dispatch_rule(
         result = await lk.create_sip_dispatch_rule(
             name=rule_name,
             trunk_ids=trunk_ids_list,
+            dispatch_rule_type=dispatch_rule_type,
             room_name=room_name,
-            pin=pin,
-            rule_type=rule_type,
             room_prefix=room_prefix,
+            pin=pin,
             randomize=randomize,
+            hide_phone_number=hide_phone_number,
             agent_name=agent_name,
             agent_metadata=agent_metadata,
             metadata=metadata,
+            plain_json=plain_json,
         )
 
         # Success message
@@ -533,12 +519,23 @@ async def create_dispatch_rule(
             url=f"/sip-inbound?flash_message={success_msg}&flash_type=success", status_code=303
         )
     except Exception as e:
+        # Extract user-friendly error message
         error_msg = str(e)
+        if hasattr(e, 'message'):
+            error_msg = e.message
+        elif hasattr(e, 'args') and e.args:
+            error_msg = str(e.args[0])
+        
         print(f"Error creating SIP dispatch rule: {e}")
         import traceback
         traceback.print_exc()
 
-        # Error message
+        # Error message - make it more user-friendly
+        if "missing rule" in error_msg.lower():
+            error_msg = "Invalid dispatch rule configuration. Please check your settings."
+        elif "invalid_argument" in error_msg.lower():
+            error_msg = "Invalid configuration. Please verify all required fields are filled."
+        
         encoded_error = quote(f"Failed to create dispatch rule: {error_msg}")
         return RedirectResponse(
             url=f"/sip-inbound?flash_message={encoded_error}&flash_type=danger", status_code=303
@@ -552,14 +549,16 @@ async def update_dispatch_rule(
     sip_dispatch_rule_id: str = Form(...),
     rule_name: Optional[str] = Form(None),
     trunk_ids: Optional[str] = Form(None),
+    dispatch_rule_type: Optional[str] = Form(None),
     room_name: Optional[str] = Form(None),
-    pin: Optional[str] = Form(None),
-    rule_type: Optional[str] = Form(None),
     room_prefix: Optional[str] = Form(None),
-    randomize: Optional[bool] = Form(None),
+    pin: Optional[str] = Form(None),
+    randomize: bool = Form(False),
+    hide_phone_number: bool = Form(False),
     agent_name: Optional[str] = Form(None),
     agent_metadata: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    plain_json: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Update an existing SIP dispatch rule"""
@@ -578,14 +577,16 @@ async def update_dispatch_rule(
             sip_dispatch_rule_id=sip_dispatch_rule_id,
             name=rule_name,
             trunk_ids=trunk_ids_list,
+            dispatch_rule_type=dispatch_rule_type,
             room_name=room_name,
-            pin=pin,
-            rule_type=rule_type,
             room_prefix=room_prefix,
+            pin=pin,
             randomize=randomize,
+            hide_phone_number=hide_phone_number,
             agent_name=agent_name,
             agent_metadata=agent_metadata,
             metadata=metadata,
+            plain_json=plain_json,
         )
 
         # Success message

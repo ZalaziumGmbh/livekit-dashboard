@@ -1,8 +1,11 @@
 """LiveKit SDK Client Wrapper - Pure Async Version"""
 
 import asyncio
+import base64
+import json
 import os
 import time
+from datetime import timedelta
 from typing import List, Optional, Tuple, Dict, Any
 
 from livekit import api, rtc
@@ -19,8 +22,8 @@ class LiveKitClient:
         # Don't create the API instance here - do it lazily in async context
         self._lk_api = None
 
-        # SIP is optional
-        self.sip_enabled = os.environ.get("ENABLE_SIP", "false").lower() == "true"
+        # SIP is enabled by default (matches docker-compose default)
+        self.sip_enabled = os.environ.get("ENABLE_SIP", "true").lower() == "true"
 
     async def _get_api(self):
         """Get or create LiveKit API instance in async context"""
@@ -84,7 +87,7 @@ class LiveKitClient:
         req = api.ListParticipantsRequest(room=room_name)
         resp = await lk.room.list_participants(req)
         return list(resp.participants)
-    
+
     async def get_detailed_participants(self, room_name: str) -> List:
         """Get detailed participant information including metadata and connection info"""
         try:
@@ -92,7 +95,7 @@ class LiveKitClient:
             req = api.ListParticipantsRequest(room=room_name)
             resp = await lk.room.list_participants(req)
             participants = list(resp.participants)
-            
+
             # Get additional details for each participant if needed
             detailed_participants = []
             for participant in participants:
@@ -103,10 +106,12 @@ class LiveKitClient:
                     )
                     detailed_participants.append(detailed)
                 except Exception as e:
-                    print(f"DEBUG: Could not get details for participant {participant.identity}: {e}")
+                    print(
+                        f"DEBUG: Could not get details for participant {participant.identity}: {e}"
+                    )
                     # Fallback to basic participant info
                     detailed_participants.append(participant)
-            
+
             return detailed_participants
         except Exception as e:
             print(f"DEBUG: Error getting detailed participants for room {room_name}: {e}")
@@ -117,14 +122,14 @@ class LiveKitClient:
         try:
             rooms, _ = await self.list_rooms()
             all_participants = []
-            
+
             for room in rooms:
                 participants = await self.get_detailed_participants(room.name)
                 # Add room context to each participant
                 for participant in participants:
                     participant._room_name = room.name
                 all_participants.extend(participants)
-            
+
             return all_participants
         except Exception as e:
             print(f"DEBUG: Error getting all participants: {e}")
@@ -193,7 +198,7 @@ class LiveKitClient:
             .with_name(name or identity)
             .with_metadata(metadata)
             .with_grants(grant)
-            .with_ttl(ttl)
+            .with_ttl(timedelta(seconds=ttl))
         )
 
         return token.to_jwt()
@@ -265,6 +270,68 @@ class LiveKitClient:
             print(f"Error listing SIP inbound trunks: {e}")
             return []
 
+    def _rule_to_json(self, rule) -> str:
+        """Convert a SIPDispatchRuleInfo to JSON string"""
+        try:
+            rule_json = {}
+
+            # Build rule object
+            if hasattr(rule, "rule") and rule.rule:
+                rule_obj = rule.rule
+                if hasattr(rule_obj, "HasField"):
+                    if rule_obj.HasField("dispatch_rule_direct"):
+                        rule_json["rule"] = {
+                            "dispatch_rule_direct": {
+                                "room_name": rule_obj.dispatch_rule_direct.room_name or "",
+                                "pin": rule_obj.dispatch_rule_direct.pin or "",
+                            }
+                        }
+                    elif rule_obj.HasField("dispatch_rule_individual"):
+                        rule_json["rule"] = {
+                            "dispatch_rule_individual": {
+                                "room_prefix": rule_obj.dispatch_rule_individual.room_prefix or "",
+                                "pin": rule_obj.dispatch_rule_individual.pin or "",
+                            }
+                        }
+                    elif rule_obj.HasField("dispatch_rule_callee"):
+                        rule_json["rule"] = {
+                            "dispatch_rule_callee": {
+                                "room_prefix": rule_obj.dispatch_rule_callee.room_prefix or "",
+                                "pin": rule_obj.dispatch_rule_callee.pin or "",
+                                "randomize": rule_obj.dispatch_rule_callee.randomize,
+                            }
+                        }
+
+            # Add other fields
+            if hasattr(rule, "name") and rule.name:
+                rule_json["name"] = rule.name
+            if hasattr(rule, "trunk_ids") and rule.trunk_ids:
+                rule_json["trunk_ids"] = list(rule.trunk_ids)
+            if hasattr(rule, "hide_phone_number"):
+                rule_json["hide_phone_number"] = rule.hide_phone_number
+            if hasattr(rule, "metadata") and rule.metadata:
+                rule_json["metadata"] = rule.metadata
+            if hasattr(rule, "attributes") and rule.attributes:
+                # Convert protobuf Map to dict
+                rule_json["attributes"] = dict(rule.attributes)
+            if (
+                hasattr(rule, "room_config")
+                and rule.room_config
+                and hasattr(rule.room_config, "agents")
+            ):
+                agents = []
+                for agent in rule.room_config.agents:
+                    agents.append(
+                        {"agent_name": agent.agent_name or "", "metadata": agent.metadata or ""}
+                    )
+                if agents:
+                    rule_json["room_config"] = {"agents": agents}
+
+            return json.dumps(rule_json, indent=2)
+        except Exception as e:
+            print(f"Error converting rule to JSON: {e}")
+            return "{}"
+
     async def list_sip_dispatch_rules(self):
         """List SIP dispatch rules"""
         if not self.sip_enabled:
@@ -273,9 +340,75 @@ class LiveKitClient:
             lk = await self._get_api()
             req = api.ListSIPDispatchRuleRequest()
             resp = await lk.sip.list_dispatch_rule(req)
-            return list(resp.items) if hasattr(resp, "items") else []
+            rules = list(resp.items) if hasattr(resp, "items") else []
+
+            # Create a wrapper class to add rule_type without modifying protobuf objects
+            class RuleWrapper:
+                def __init__(self, rule, rule_type, rule_json):
+                    self._rule = rule
+                    self.rule_type = rule_type
+                    self.rule_json = rule_json
+
+                def __getattr__(self, name):
+                    # Delegate all other attribute access to the original rule object
+                    return getattr(self._rule, name)
+
+            # Determine rule type for each rule and wrap
+            wrapped_rules = []
+            for rule in rules:
+                rule_type = "direct"  # Default to direct
+                if hasattr(rule, "rule") and rule.rule:
+                    rule_obj = rule.rule
+                    detected = False
+
+                    # Method 1: Use HasField for protobuf oneof (most reliable)
+                    if hasattr(rule_obj, "HasField"):
+                        try:
+                            if rule_obj.HasField("dispatch_rule_individual"):
+                                rule_type = "individual"
+                                detected = True
+                            elif rule_obj.HasField("dispatch_rule_callee"):
+                                rule_type = "callee"
+                                detected = True
+                            elif rule_obj.HasField("dispatch_rule_direct"):
+                                rule_type = "direct"
+                                detected = True
+                        except ValueError:
+                            pass  # HasField failed, try content check
+
+                    # Method 2: Fallback - check which rule type has actual content
+                    if not detected:
+                        # Check individual first (has room_prefix)
+                        if hasattr(rule_obj, "dispatch_rule_individual"):
+                            ind = rule_obj.dispatch_rule_individual
+                            if ind and hasattr(ind, "room_prefix") and ind.room_prefix:
+                                rule_type = "individual"
+                                detected = True
+                        # Check callee (has room_prefix)
+                        if not detected and hasattr(rule_obj, "dispatch_rule_callee"):
+                            cal = rule_obj.dispatch_rule_callee
+                            if cal and hasattr(cal, "room_prefix") and cal.room_prefix:
+                                rule_type = "callee"
+                                detected = True
+                        # Check direct (has room_name)
+                        if not detected and hasattr(rule_obj, "dispatch_rule_direct"):
+                            dir_rule = rule_obj.dispatch_rule_direct
+                            if dir_rule and hasattr(dir_rule, "room_name") and dir_rule.room_name:
+                                rule_type = "direct"
+                                detected = True
+
+                # Convert rule to JSON and encode as base64 for safe HTML attribute storage
+                rule_json = self._rule_to_json(rule)
+                rule_json_b64 = (
+                    base64.b64encode(rule_json.encode("utf-8")).decode("utf-8") if rule_json else ""
+                )
+                wrapped_rules.append(RuleWrapper(rule, rule_type, rule_json_b64))
+            return wrapped_rules
         except Exception as e:
             print(f"Error listing SIP dispatch rules: {e}")
+            import traceback
+
+            traceback.print_exc()
             return []
 
     async def create_sip_participant(
@@ -310,8 +443,6 @@ class LiveKitClient:
         metadata: Optional[str] = None,
         headers: Optional[dict] = None,
         headers_to_attributes: Optional[dict] = None,
-        media_encryption: Optional[str] = None,
-        include_headers: Optional[str] = None,
         **kwargs,
     ):
         """Create a SIP outbound trunk"""
@@ -348,6 +479,7 @@ class LiveKitClient:
         if headers:
             for key, value in headers.items():
                 trunk_info.headers[key] = value
+        if headers_to_attributes:
             for key, value in headers_to_attributes.items():
                 trunk_info.headers_to_attributes[key] = value
 
@@ -381,9 +513,6 @@ class LiveKitClient:
         metadata: Optional[str] = None,
         headers: Optional[dict] = None,
         headers_to_attributes: Optional[dict] = None,
-
-        media_encryption: Optional[str] = None,
-        include_headers: Optional[str] = None,
         **kwargs,
     ):
         """Update a SIP outbound trunk"""
@@ -439,6 +568,7 @@ class LiveKitClient:
             for key, value in headers.items():
                 trunk_info.headers[key] = value
 
+        # Set headers to attributes
         if headers_to_attributes is not None:
             for key, value in headers_to_attributes.items():
                 trunk_info.headers_to_attributes[key] = value
@@ -480,10 +610,6 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
-
-        media_encryption: Optional[str] = None,
-        include_headers: Optional[str] = None,
-        krisp_enabled: bool = False,
         **kwargs,
     ):
         """Create a SIP inbound trunk"""
@@ -539,10 +665,6 @@ class LiveKitClient:
         auth_username: Optional[str] = None,
         auth_password: Optional[str] = None,
         metadata: Optional[str] = None,
-
-        media_encryption: Optional[str] = None,
-        include_headers: Optional[str] = None,
-        krisp_enabled: Optional[bool] = None,
         **kwargs,
     ):
         """Update a SIP inbound trunk"""
@@ -592,57 +714,101 @@ class LiveKitClient:
         self,
         name: Optional[str] = None,
         trunk_ids: Optional[List[str]] = None,
+        hide_phone_number: bool = False,
+        dispatch_rule_type: str = "direct",
         room_name: Optional[str] = None,
-        pin: Optional[str] = None,
-        rule_type: str = "direct",
         room_prefix: Optional[str] = None,
+        pin: Optional[str] = None,
         randomize: bool = False,
         metadata: Optional[str] = None,
         attributes: Optional[dict] = None,
         agent_name: Optional[str] = None,
         agent_metadata: Optional[str] = None,
+        plain_json: Optional[str] = None,
         **kwargs,
     ):
-        """Create a SIP dispatch rule with optional agent configuration"""
+        """Create a SIP dispatch rule with optional agent configuration
+
+        Args:
+            dispatch_rule_type: One of 'direct', 'individual', or 'callee'
+                - 'direct': Route to a specific room (requires room_name)
+                - 'individual': Route each caller to their own individual room (supports room_prefix, pin)
+                - 'callee': Route based on the called number (supports room_prefix, pin, randomize)
+            room_name: Room name for direct dispatch type
+            room_prefix: Room prefix for individual/callee dispatch types
+            pin: PIN for any dispatch type
+            randomize: Whether to randomize room name for callee type
+            plain_json: Optional JSON string to parse and use for rule configuration (takes precedence over other params)
+        """
         if not self.sip_enabled:
             raise ValueError("SIP is not enabled")
 
         lk = await self._get_api()
 
-        # Build dispatch rule
-        rule = api.SIPDispatchRule()
-        
-        # Handle rule types
-        if rule_type == "individual":
-            # Default to "call-" prefix if none provided for individual rooms
-            rule.dispatch_rule_individual.room_prefix = room_prefix or "call-"
-            if pin:
-                rule.dispatch_rule_individual.pin = pin
-        elif rule_type == "callee":
-            # Default to "call-" prefix if none provided for callee rooms
-            rule.dispatch_rule_callee.room_prefix = room_prefix or "call-"
-            if pin:
-                rule.dispatch_rule_callee.pin = pin
-            if randomize:
-                rule.dispatch_rule_callee.randomize = True
-        else:
-            # Default to direct
-            if room_name:
-                rule.dispatch_rule_direct.room_name = room_name
-            if pin:
-                rule.dispatch_rule_direct.pin = pin
+        # If plain_json is provided, parse it and use it directly
+        print(f"DEBUG: plain_json: {plain_json}")
+        if plain_json:
+            try:
+                json_data = json.loads(plain_json)
+                # Build rule from JSON
+                rule = self._build_rule_from_json(json_data)
+                # Build rule_info from JSON
+                rule_info = self._build_rule_info_from_json(json_data, rule)
 
-        req = api.CreateSIPDispatchRuleRequest(rule=rule)
+                req = api.CreateSIPDispatchRuleRequest(
+                    rule=rule,
+                    dispatch_rule=rule_info,
+                )
+                return await lk.sip.create_dispatch_rule(req)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON format: {str(e)}")
+            except Exception as e:
+                raise ValueError(f"Error parsing JSON: {str(e)}")
+
+        # Build dispatch rule based on type
+        print(f"DEBUG: dispatch_rule_type: {dispatch_rule_type}")
+        if dispatch_rule_type == "direct":
+            # Direct dispatch: route to a specific room
+            direct_rule = api.SIPDispatchRuleDirect(
+                room_name=room_name or "",
+                pin=pin or "",
+            )
+            rule = api.SIPDispatchRule(dispatch_rule_direct=direct_rule)
+        elif dispatch_rule_type == "individual":
+            # Individual dispatch: each caller gets their own room
+            individual_rule = api.SIPDispatchRuleIndividual(
+                room_prefix=room_prefix or "",
+                pin=pin or "",
+            )
+            rule = api.SIPDispatchRule(dispatch_rule_individual=individual_rule)
+        elif dispatch_rule_type == "callee":
+            # Callee dispatch: route based on called number
+            callee_rule = api.SIPDispatchRuleCallee(
+                room_prefix=room_prefix or "",
+                pin=pin or "",
+                randomize=randomize,
+            )
+            rule = api.SIPDispatchRule(dispatch_rule_callee=callee_rule)
+        else:
+            raise ValueError(
+                f"Invalid dispatch_rule_type: {dispatch_rule_type}. Must be 'direct', 'individual', or 'callee'"
+            )
+
+        # Build dispatch rule info
+        rule_info_params: Dict[str, Any] = {
+            "rule": rule,  # This is required!
+        }
 
         if name:
-            req.name = name
+            rule_info_params["name"] = name
         if trunk_ids:
-            req.trunk_ids.extend(trunk_ids)
+            rule_info_params["trunk_ids"] = trunk_ids
         if metadata:
-            req.metadata = metadata
+            rule_info_params["metadata"] = metadata
         if attributes:
-            for key, value in attributes.items():
-                req.attributes[key] = value
+            rule_info_params["attributes"] = attributes
+        if hide_phone_number:
+            rule_info_params["hide_phone_number"] = hide_phone_number
 
         # Add agent configuration if provided
         if agent_name:
@@ -650,104 +816,231 @@ class LiveKitClient:
                 agent_name=agent_name,
                 metadata=agent_metadata or "",
             )
-            # Use CopyFrom for protobuf message field assignment
-            room_config = api.RoomConfiguration()
-            room_config.agents.append(agent_dispatch)
-            req.room_config.CopyFrom(room_config)
+            rule_info_params["room_config"] = api.RoomConfiguration(agents=[agent_dispatch])
 
+        rule_info = api.SIPDispatchRuleInfo(**rule_info_params)
+
+        req = api.CreateSIPDispatchRuleRequest(
+            rule=rule,
+            dispatch_rule=rule_info,
+        )
         return await lk.sip.create_dispatch_rule(req)
+
+    def _build_rule_from_json(self, json_data: Dict[str, Any]) -> api.SIPDispatchRule:
+        """Build SIPDispatchRule from JSON data"""
+        rule_data = json_data.get("rule", {})
+
+        # Check for dispatch rule types
+        if "dispatch_rule_direct" in rule_data:
+            direct_data = rule_data["dispatch_rule_direct"]
+            direct_rule = api.SIPDispatchRuleDirect(
+                room_name=direct_data.get("room_name", ""),
+                pin=direct_data.get("pin", ""),
+            )
+            return api.SIPDispatchRule(dispatch_rule_direct=direct_rule)
+        elif "dispatch_rule_individual" in rule_data:
+            individual_data = rule_data["dispatch_rule_individual"]
+            individual_rule = api.SIPDispatchRuleIndividual(
+                room_prefix=individual_data.get("room_prefix", ""),
+                pin=individual_data.get("pin", ""),
+            )
+            return api.SIPDispatchRule(dispatch_rule_individual=individual_rule)
+        elif "dispatch_rule_callee" in rule_data:
+            callee_data = rule_data["dispatch_rule_callee"]
+            callee_rule = api.SIPDispatchRuleCallee(
+                room_prefix=callee_data.get("room_prefix", ""),
+                pin=callee_data.get("pin", ""),
+                randomize=callee_data.get("randomize", False),
+            )
+            return api.SIPDispatchRule(dispatch_rule_callee=callee_rule)
+        else:
+            raise ValueError(
+                "JSON must contain one of: dispatch_rule_direct, dispatch_rule_individual, or dispatch_rule_callee"
+            )
+
+    def _build_rule_info_from_json(
+        self, json_data: Dict[str, Any], rule: api.SIPDispatchRule
+    ) -> api.SIPDispatchRuleInfo:
+        """Build SIPDispatchRuleInfo from JSON data"""
+        rule_info_params: Dict[str, Any] = {
+            "rule": rule,
+        }
+
+        if "name" in json_data:
+            rule_info_params["name"] = json_data["name"]
+        if "trunk_ids" in json_data:
+            rule_info_params["trunk_ids"] = json_data["trunk_ids"]
+        if "metadata" in json_data:
+            rule_info_params["metadata"] = json_data["metadata"]
+        if "attributes" in json_data:
+            rule_info_params["attributes"] = json_data["attributes"]
+        if "hide_phone_number" in json_data:
+            rule_info_params["hide_phone_number"] = json_data["hide_phone_number"]
+        if "room_config" in json_data:
+            room_config_data = json_data["room_config"]
+            agents = []
+            if "agents" in room_config_data:
+                for agent_data in room_config_data["agents"]:
+                    agent = api.RoomAgentDispatch(
+                        agent_name=agent_data.get("agent_name", ""),
+                        metadata=agent_data.get("metadata", ""),
+                    )
+                    agents.append(agent)
+            rule_info_params["room_config"] = api.RoomConfiguration(agents=agents)
+
+        return api.SIPDispatchRuleInfo(**rule_info_params)
 
     async def update_sip_dispatch_rule(
         self,
         sip_dispatch_rule_id: str,
         name: Optional[str] = None,
         trunk_ids: Optional[List[str]] = None,
+        hide_phone_number: Optional[bool] = None,
+        dispatch_rule_type: Optional[str] = None,
         room_name: Optional[str] = None,
+        room_prefix: Optional[str] = None,
         pin: Optional[str] = None,
+        randomize: Optional[bool] = None,
         metadata: Optional[str] = None,
         attributes: Optional[dict] = None,
         agent_name: Optional[str] = None,
         agent_metadata: Optional[str] = None,
-        rule_type: Optional[str] = None,
-        room_prefix: Optional[str] = None,
-        randomize: Optional[bool] = None,
+        plain_json: Optional[str] = None,
         **kwargs,
     ):
-        """Update a SIP dispatch rule with optional agent configuration"""
+        """Update a SIP dispatch rule with optional agent configuration
+
+        Args:
+            dispatch_rule_type: One of 'direct', 'individual', or 'callee'
+                - 'direct': Route to a specific room (requires room_name)
+                - 'individual': Route each caller to their own individual room (supports room_prefix, pin)
+                - 'callee': Route based on the called number (supports room_prefix, pin, randomize)
+            room_name: Room name for direct dispatch type
+            room_prefix: Room prefix for individual/callee dispatch types
+            pin: PIN for any dispatch type
+            randomize: Whether to randomize room name for callee type
+            plain_json: Optional JSON string to parse and use for rule configuration (takes precedence over other params)
+        """
         if not self.sip_enabled:
             raise ValueError("SIP is not enabled")
 
         lk = await self._get_api()
 
-        # Build update object
-        update = api.SIPDispatchRuleUpdate()
+        # If plain_json is provided, parse it and use it directly
+        print(f"DEBUG: plain_json: {plain_json}")
+        if plain_json:
+            try:
+                json_data = json.loads(plain_json)
+                # Build rule from JSON
+                rule = self._build_rule_from_json(json_data)
+                # Build rule_info from JSON and add sip_dispatch_rule_id
+                rule_info_json = self._build_rule_info_from_json(json_data, rule)
+                # Create new rule_info with sip_dispatch_rule_id
+                rule_info_params_json: Dict[str, Any] = {
+                    "sip_dispatch_rule_id": sip_dispatch_rule_id,
+                    "rule": rule,
+                }
+                # Copy fields from rule_info_json
+                if hasattr(rule_info_json, "name") and rule_info_json.name:
+                    rule_info_params_json["name"] = rule_info_json.name
+                if hasattr(rule_info_json, "trunk_ids") and rule_info_json.trunk_ids:
+                    rule_info_params_json["trunk_ids"] = list(rule_info_json.trunk_ids)
+                if hasattr(rule_info_json, "metadata") and rule_info_json.metadata:
+                    rule_info_params_json["metadata"] = rule_info_json.metadata
+                if hasattr(rule_info_json, "attributes") and rule_info_json.attributes:
+                    rule_info_params_json["attributes"] = dict(rule_info_json.attributes)
+                if hasattr(rule_info_json, "hide_phone_number"):
+                    rule_info_params_json["hide_phone_number"] = rule_info_json.hide_phone_number
+                if hasattr(rule_info_json, "room_config") and rule_info_json.room_config:
+                    rule_info_params_json["room_config"] = rule_info_json.room_config
+
+                rule_info = api.SIPDispatchRuleInfo(**rule_info_params_json)
+
+                return await lk.sip.update_dispatch_rule(
+                    rule_id=sip_dispatch_rule_id,
+                    rule=rule_info,
+                )
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON format: {str(e)}")
+            except Exception as e:
+                raise ValueError(f"Error parsing JSON: {str(e)}")
+
+        # Build dispatch rule based on type
+        # If dispatch_rule_type is provided, set the appropriate rule type
+        print(f"DEBUG: dispatch_rule_type: {dispatch_rule_type}")
+        if dispatch_rule_type:
+            if dispatch_rule_type == "direct":
+                # Direct dispatch: route to a specific room
+                direct_rule = api.SIPDispatchRuleDirect(
+                    room_name=room_name or "",
+                    pin=pin or "",
+                )
+                rule = api.SIPDispatchRule(dispatch_rule_direct=direct_rule)
+            elif dispatch_rule_type == "individual":
+                # Individual dispatch: each caller gets their own room
+                individual_rule = api.SIPDispatchRuleIndividual(
+                    room_prefix=room_prefix or "",
+                    pin=pin or "",
+                )
+                rule = api.SIPDispatchRule(dispatch_rule_individual=individual_rule)
+                print(f"DEBUG: individual_rule: {individual_rule}")
+            elif dispatch_rule_type == "callee":
+                # Callee dispatch: route based on called number
+                callee_rule = api.SIPDispatchRuleCallee(
+                    room_prefix=room_prefix or "",
+                    pin=pin or "",
+                    randomize=randomize if randomize is not None else False,
+                )
+                rule = api.SIPDispatchRule(dispatch_rule_callee=callee_rule)
+            else:
+                raise ValueError(
+                    f"Invalid dispatch_rule_type: {dispatch_rule_type}. Must be 'direct', 'individual', or 'callee'"
+                )
+        else:
+            # If type not provided, try to preserve existing rule structure
+            # For backward compatibility, assume direct if room_name or pin is provided
+            if room_name is not None or pin is not None:
+                direct_rule = api.SIPDispatchRuleDirect(
+                    room_name=room_name or "",
+                    pin=pin or "",
+                )
+                rule = api.SIPDispatchRule(dispatch_rule_direct=direct_rule)
+
+        # Build dispatch rule info
+        rule_info_params: Dict[str, Any] = {
+            "sip_dispatch_rule_id": sip_dispatch_rule_id,
+            "rule": rule,
+        }
 
         if name is not None:
-            update.name = name
-        if trunk_ids is not None and trunk_ids:
-            # ListUpdate uses .set to replace the entire list
-            update.trunk_ids.set.extend(trunk_ids)
+            rule_info_params["name"] = name
+        if trunk_ids is not None:
+            rule_info_params["trunk_ids"] = trunk_ids
         if metadata is not None:
-            update.metadata = metadata
+            rule_info_params["metadata"] = metadata
         if attributes is not None:
-            for key, value in attributes.items():
-                update.attributes[key] = value
-
-        # Handle rule (room_name, pin, etc)
-        if room_name is not None or pin is not None or rule_type is not None or room_prefix is not None or randomize is not None:
-            rule = api.SIPDispatchRule()
-            
-            # If rule_type is provided, switch type
-            # If not, we might need to know the current type, but for now let's assume if they provide room_prefix they want individual/callee
-            
-            target_type = rule_type or "direct" # Default to direct if not specified, but this logic might be flawed if updating existing.
-            # However, in partial update, we usually replace the whole rule oneof.
-            
-            if target_type == "individual":
-                if room_prefix is not None:
-                    rule.dispatch_rule_individual.room_prefix = room_prefix
-                if pin is not None:
-                    rule.dispatch_rule_individual.pin = pin
-            elif target_type == "callee":
-                if room_prefix is not None:
-                    rule.dispatch_rule_callee.room_prefix = room_prefix
-                if pin is not None:
-                    rule.dispatch_rule_callee.pin = pin
-                if randomize is not None:
-                    rule.dispatch_rule_callee.randomize = randomize
-            else:
-                # Direct
-                if room_name is not None:
-                    rule.dispatch_rule_direct.room_name = room_name
-                if pin is not None:
-                    rule.dispatch_rule_direct.pin = pin
-            
-            update.rule.CopyFrom(rule)
+            rule_info_params["attributes"] = attributes
+        if hide_phone_number is not None:
+            rule_info_params["hide_phone_number"] = hide_phone_number
 
         # Add agent configuration if provided
         if agent_name is not None:
-            # Note: SIPDispatchRuleUpdate doesn't seem to have room_config based on inspection
-            # But let's check if it has it. Inspection said:
-            # ['trunk_ids', 'rule', 'name', 'metadata', 'attributes', 'media_encryption']
-            # It does NOT have room_config.
-            # So we might not be able to update agent config via this method if it's missing.
-            # However, CreateSIPDispatchRuleRequest has it.
-            # Maybe we need to use 'replace' with SIPDispatchRuleInfo if we want to update agent?
-            # SIPDispatchRuleInfo has room_config.
-            
-            # If we want to support agent update, we might need to use 'replace'.
-            # But 'replace' requires full object.
-            
-            # For now, let's comment out agent update if it's not supported in partial update
-            # OR check if I missed it in inspection.
-            pass
+            if agent_name:  # If not empty string
+                agent_dispatch = api.RoomAgentDispatch(
+                    agent_name=agent_name,
+                    metadata=agent_metadata or "",
+                )
+                rule_info_params["room_config"] = api.RoomConfiguration(agents=[agent_dispatch])
+            else:
+                # Empty agent_name means clear the agent configuration
+                rule_info_params["room_config"] = api.RoomConfiguration()
 
-        req = api.UpdateSIPDispatchRuleRequest(
-            sip_dispatch_rule_id=sip_dispatch_rule_id,
-            update=update
+        rule_info = api.SIPDispatchRuleInfo(**rule_info_params)
+
+        return await lk.sip.update_dispatch_rule(
+            rule_id=sip_dispatch_rule_id,
+            rule=rule_info,
         )
-
-        return await lk.sip.update_dispatch_rule(req)
 
     async def delete_sip_dispatch_rule(self, sip_dispatch_rule_id: str):
         """Delete a SIP dispatch rule"""
@@ -757,164 +1050,6 @@ class LiveKitClient:
         lk = await self._get_api()
         req = api.DeleteSIPDispatchRuleRequest(sip_dispatch_rule_id=sip_dispatch_rule_id)
         return await lk.sip.delete_dispatch_rule(req)
-
-    # Agent Management
-    async def list_agent_dispatches(self, room_name: str) -> List:
-        """List all agent dispatches in a specific room"""
-        try:
-            lk = await self._get_api()
-            dispatches = await lk.agent_dispatch.list_dispatch(room_name=room_name)
-            return list(dispatches) if dispatches else []
-        except Exception as e:
-            print(f"Error listing agent dispatches for room {room_name}: {e}")
-            return []
-
-    async def get_all_agents(self) -> List[Dict[str, Any]]:
-        """Get all agents across all rooms with their status"""
-        try:
-            rooms, _ = await self.list_rooms()
-            all_agents = []
-            seen_agents = {}  # Track unique agents by name
-
-            for room in rooms:
-                try:
-                    # Get agent dispatches for this room
-                    dispatches = await self.list_agent_dispatches(room.name)
-
-                    for dispatch in dispatches:
-                        agent_name = getattr(dispatch, 'agent_name', 'Unknown')
-                        dispatch_id = getattr(dispatch, 'id', '')
-
-                        # Get job status
-                        jobs = []
-                        status = 'UNKNOWN'
-                        worker_id = None
-                        started_at = None
-
-                        if hasattr(dispatch, 'state') and dispatch.state:
-                            if hasattr(dispatch.state, 'jobs') and dispatch.state.jobs:
-                                for job in dispatch.state.jobs:
-                                    job_info = {
-                                        'id': getattr(job, 'id', ''),
-                                        'type': str(getattr(job, 'type', '')),
-                                        'status': 'UNKNOWN',
-                                        'worker_id': None,
-                                        'started_at': None,
-                                        'room': room.name,
-                                    }
-
-                                    if hasattr(job, 'state') and job.state:
-                                        # JobStatus: JS_PENDING=0, JS_RUNNING=1, JS_SUCCESS=2, JS_FAILED=3
-                                        job_status = getattr(job.state, 'status', 0)
-                                        status_map = {0: 'PENDING', 1: 'RUNNING', 2: 'SUCCESS', 3: 'FAILED'}
-                                        job_info['status'] = status_map.get(job_status, 'UNKNOWN')
-                                        job_info['worker_id'] = getattr(job.state, 'worker_id', None)
-                                        job_info['started_at'] = getattr(job.state, 'started_at', None)
-                                        job_info['error'] = getattr(job.state, 'error', None)
-
-                                        # Use the most recent job's status as the agent status
-                                        if job_info['status'] == 'RUNNING':
-                                            status = 'RUNNING'
-                                            worker_id = job_info['worker_id']
-                                            started_at = job_info['started_at']
-                                        elif status != 'RUNNING':
-                                            status = job_info['status']
-
-                                    jobs.append(job_info)
-
-                        agent_info = {
-                            'agent_name': agent_name,
-                            'dispatch_id': dispatch_id,
-                            'room': room.name,
-                            'status': status,
-                            'worker_id': worker_id,
-                            'started_at': started_at,
-                            'jobs': jobs,
-                            'concurrent_sessions': len([j for j in jobs if j['status'] == 'RUNNING']),
-                            'metadata': getattr(dispatch, 'metadata', ''),
-                        }
-
-                        # Track unique agents
-                        if agent_name not in seen_agents:
-                            seen_agents[agent_name] = {
-                                'agent_name': agent_name,
-                                'status': status,
-                                'concurrent_sessions': 0,
-                                'rooms': [],
-                                'dispatches': [],
-                            }
-
-                        seen_agents[agent_name]['dispatches'].append(agent_info)
-                        seen_agents[agent_name]['rooms'].append(room.name)
-                        if status == 'RUNNING':
-                            seen_agents[agent_name]['status'] = 'RUNNING'
-                            seen_agents[agent_name]['concurrent_sessions'] += agent_info['concurrent_sessions']
-
-                        all_agents.append(agent_info)
-
-                except Exception as e:
-                    print(f"Error getting agents for room {room.name}: {e}")
-                    continue
-
-            return list(seen_agents.values())
-
-        except Exception as e:
-            print(f"Error getting all agents: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
-
-    async def get_agent_analytics(self) -> Dict[str, Any]:
-        """Get agent analytics summary"""
-        try:
-            agents = await self.get_all_agents()
-
-            total_agents = len(agents)
-            running_agents = len([a for a in agents if a['status'] == 'RUNNING'])
-            total_sessions = sum(a.get('concurrent_sessions', 0) for a in agents)
-
-            return {
-                'agents_deployed': total_agents,
-                'concurrent_sessions': total_sessions,
-                'running_agents': running_agents,
-                'agents': agents,
-            }
-        except Exception as e:
-            print(f"Error getting agent analytics: {e}")
-            return {
-                'agents_deployed': 0,
-                'concurrent_sessions': 0,
-                'running_agents': 0,
-                'agents': [],
-            }
-
-    async def create_agent_dispatch(
-        self,
-        room_name: str,
-        agent_name: str,
-        metadata: Optional[str] = None,
-    ):
-        """Create an agent dispatch to join a room"""
-        try:
-            lk = await self._get_api()
-            req = api.CreateAgentDispatchRequest(
-                room=room_name,
-                agent_name=agent_name,
-                metadata=metadata or "",
-            )
-            return await lk.agent_dispatch.create_dispatch(req)
-        except Exception as e:
-            print(f"Error creating agent dispatch: {e}")
-            raise
-
-    async def delete_agent_dispatch(self, dispatch_id: str, room_name: str):
-        """Delete an agent dispatch"""
-        try:
-            lk = await self._get_api()
-            return await lk.agent_dispatch.delete_dispatch(dispatch_id=dispatch_id, room_name=room_name)
-        except Exception as e:
-            print(f"Error deleting agent dispatch: {e}")
-            raise
 
     # Room Analytics
     async def get_room_analytics(self) -> dict:
@@ -1105,7 +1240,7 @@ class LiveKitClient:
         # 1. Set up webhook endpoints to receive LiveKit events
         # 2. Store events in a database (participant_joined, participant_left, etc.)
         # 3. Query the database for analytics data
-        
+
         # For now, return empty data
         return {
             "has_webhook_data": False,
@@ -1124,21 +1259,21 @@ class LiveKitClient:
         try:
             # Get real-time data
             room_analytics = await self.get_room_analytics()
-            
+
             # Get webhook data (if available)
             webhook_analytics = await self.get_webhook_analytics()
-            
+
             # Calculate enhanced metrics
             total_participants = room_analytics.get("total_participants", 0)
             total_rooms = room_analytics.get("total_rooms", 0)
-            
+
             # Connection success rate based on room/participant health
             if total_rooms > 0:
                 active_rooms = room_analytics.get("active_rooms", 0)
                 connection_success = round((active_rooms / total_rooms) * 100, 1)
             else:
                 connection_success = 100
-            
+
             # Estimate platforms based on room patterns
             platforms = {}
             if total_participants > 0:
@@ -1147,22 +1282,26 @@ class LiveKitClient:
                     "Web": int(total_participants * 0.6),
                     "iOS": int(total_participants * 0.2),
                     "Android": int(total_participants * 0.15),
-                    "React Native": int(total_participants * 0.05)
+                    "React Native": int(total_participants * 0.05),
                 }
             else:
                 # Sample data when no participants
                 platforms = {"Web": 8, "iOS": 3, "Android": 2, "React Native": 1}
-            
+
             # Connection types based on LiveKit deployment
-            connection_types = {
-                "WebRTC Direct": max(1, int(total_participants * 0.7)),
-                "TURN Relay": max(1, int(total_participants * 0.3))
-            } if total_participants > 0 else {"WebRTC Direct": 10, "TURN Relay": 4}
-            
+            connection_types = (
+                {
+                    "WebRTC Direct": max(1, int(total_participants * 0.7)),
+                    "TURN Relay": max(1, int(total_participants * 0.3)),
+                }
+                if total_participants > 0
+                else {"WebRTC Direct": 10, "TURN Relay": 4}
+            )
+
             # Estimate connection minutes
             avg_session_minutes = 25  # Average session length
             connection_minutes = total_participants * avg_session_minutes
-            
+
             return {
                 "connection_success": connection_success,
                 "connection_minutes": connection_minutes,
@@ -1172,7 +1311,7 @@ class LiveKitClient:
                 "participant_count": total_participants,
                 "room_count": total_rooms,
             }
-            
+
         except Exception as e:
             print(f"DEBUG: Error getting enhanced analytics: {e}")
             # Fallback to sample data
@@ -1185,6 +1324,7 @@ class LiveKitClient:
                 "participant_count": 0,
                 "room_count": 0,
             }
+
     async def get_sip_analytics(self) -> dict:
         """Get SIP/telephony analytics data"""
         print(f"DEBUG: get_sip_analytics called, sip_enabled = {self.sip_enabled}")
@@ -1265,6 +1405,7 @@ class LiveKitClient:
 
             return {
                 "status": "healthy",
+                "is_connected": True,
                 "rooms_count": len(rooms),
                 "participants_count": total_participants,
                 "sdk_latency_ms": round(latency * 1000, 2),
@@ -1274,14 +1415,17 @@ class LiveKitClient:
         except Exception as e:
             return {
                 "status": "error",
+                "is_connected": False,
                 "error": str(e),
                 "url": self.url,
             }
 
     # RTC Connection Methods
-    async def connect_to_room_for_stats(self, room_name: str) -> Tuple[Optional[Any], float, Optional[str]]:
+    async def connect_to_room_for_stats(
+        self, room_name: str
+    ) -> Tuple[Optional[Any], float, Optional[str]]:
         """Connect to a room via RTC and get connection stats
-        
+
         Returns:
             Tuple of (stats, latency_ms, error_message)
         """
@@ -1289,18 +1433,15 @@ class LiveKitClient:
         error_msg = None
         stats = None
         latency = 0.0
-        
+
         try:
             t0 = time.perf_counter()
-            
+
             # Create access token for temporary connection
             grant = api.VideoGrants(
-                room_join=True,
-                room=room_name,
-                can_publish=False,
-                can_subscribe=True
+                room_join=True, room=room_name, can_publish=False, can_subscribe=True
             )
-            
+
             token = (
                 api.AccessToken(self.key, self.secret)
                 .with_identity("dashboard-stats-client")
@@ -1308,26 +1449,26 @@ class LiveKitClient:
                 .with_grants(grant)
                 .to_jwt()
             )
-            
+
             # Create room and connect
             room = rtc.Room()
-            
+
             # Connect to the room
             await room.connect(self.url, token)
-            
+
             # Wait a moment for connection to stabilize
             await asyncio.sleep(0.5)
-            
+
             # Get RTC stats
             if room.isconnected():
                 stats = await room.get_rtc_stats()
-            
+
             latency = (time.perf_counter() - t0) * 1000  # Convert to ms
-            
+
         except Exception as e:
             error_msg = str(e)
-            latency = (time.perf_counter() - t0) * 1000 if 't0' in locals() else 0.0
-            
+            latency = (time.perf_counter() - t0) * 1000 if "t0" in locals() else 0.0
+
         finally:
             # Always disconnect to clean up
             if room:
@@ -1335,157 +1476,277 @@ class LiveKitClient:
                     await room.disconnect()
                 except:
                     pass  # Ignore disconnect errors
-        
+
         return stats, latency, error_msg
-    
+
     async def get_room_rtc_stats(self, room_name: str) -> Tuple[Dict[str, Any], float]:
         """Get RTC statistics for a room
-        
+
         Returns:
             Tuple of (stats_dict, latency_ms)
         """
         stats, latency, error = await self.connect_to_room_for_stats(room_name)
-        
+
         if error:
-            return {
-                "error": error,
-                "room_name": room_name
-            }, latency
-            
+            return {"error": error, "room_name": room_name}, latency
+
         if not stats:
-            return {
-                "error": "No stats available",
-                "room_name": room_name
-            }, latency
-        
+            return {"error": "No stats available", "room_name": room_name}, latency
+
         # Convert RTC stats to dictionary format
         stats_dict = {
             "room_name": room_name,
             "publisher_stats": [],
             "subscriber_stats": [],
-            "latency_ms": latency
+            "latency_ms": latency,
         }
-        
+
         # Process publisher stats - focus on meaningful data
         for stat in stats.publisher_stats:
             stat_type = stat.WhichOneof("stats")
             stat_info = {
-                "timestamp": getattr(stat, 'timestamp', None),
+                "timestamp": getattr(stat, "timestamp", None),
                 "type": stat_type,
             }
-            
+
             # Add specific stats based on type
-            if stat_type == 'outbound_rtp' and hasattr(stat, 'outbound_rtp') and stat.HasField('outbound_rtp'):
+            if (
+                stat_type == "outbound_rtp"
+                and hasattr(stat, "outbound_rtp")
+                and stat.HasField("outbound_rtp")
+            ):
                 rtp_stats = stat.outbound_rtp
-                if hasattr(rtp_stats, 'outbound') and rtp_stats.HasField('outbound'):
+                if hasattr(rtp_stats, "outbound") and rtp_stats.HasField("outbound"):
                     outbound = rtp_stats.outbound
-                    stat_info.update({
-                        "packets_sent": getattr(outbound, 'packets_sent', 0),
-                        "bytes_sent": getattr(outbound, 'bytes_sent', 0),
-                        "retransmitted_packets_sent": getattr(outbound, 'retransmitted_packets_sent', 0),
-                        "target_bitrate": getattr(outbound, 'target_bitrate', 0),
-                        "frames_encoded": getattr(outbound, 'frames_encoded', 0),
-                        "key_frames_encoded": getattr(outbound, 'key_frames_encoded', 0),
-                        "total_encode_time": getattr(outbound, 'total_encode_time', 0),
-                        "nack_count": getattr(outbound, 'nack_count', 0),
-                        "fir_count": getattr(outbound, 'fir_count', 0),
-                        "pli_count": getattr(outbound, 'pli_count', 0),
-                    })
-                    
-            elif stat_type == 'peer_connection' and hasattr(stat, 'peer_connection'):
+                    stat_info.update(
+                        {
+                            "packets_sent": getattr(outbound, "packets_sent", 0),
+                            "bytes_sent": getattr(outbound, "bytes_sent", 0),
+                            "retransmitted_packets_sent": getattr(
+                                outbound, "retransmitted_packets_sent", 0
+                            ),
+                            "target_bitrate": getattr(outbound, "target_bitrate", 0),
+                            "frames_encoded": getattr(outbound, "frames_encoded", 0),
+                            "key_frames_encoded": getattr(outbound, "key_frames_encoded", 0),
+                            "total_encode_time": getattr(outbound, "total_encode_time", 0),
+                            "nack_count": getattr(outbound, "nack_count", 0),
+                            "fir_count": getattr(outbound, "fir_count", 0),
+                            "pli_count": getattr(outbound, "pli_count", 0),
+                        }
+                    )
+
+            elif stat_type == "peer_connection" and hasattr(stat, "peer_connection"):
                 # Add connection-level stats
                 stat_info["connection_type"] = "publisher"
-                
+
             # Only include meaningful stats
-            if stat_type in ['outbound_rtp', 'peer_connection', 'transport']:
+            if stat_type in ["outbound_rtp", "peer_connection", "transport"]:
                 stats_dict["publisher_stats"].append(stat_info)
-        
+
         # Process subscriber stats - focus on meaningful data
         for stat in stats.subscriber_stats:
             stat_type = stat.WhichOneof("stats")
             stat_info = {
-                "timestamp": getattr(stat, 'timestamp', None),
+                "timestamp": getattr(stat, "timestamp", None),
                 "type": stat_type,
             }
-            
+
             # Add specific stats based on type
-            if stat_type == 'inbound_rtp' and hasattr(stat, 'inbound_rtp') and stat.HasField('inbound_rtp'):
+            if (
+                stat_type == "inbound_rtp"
+                and hasattr(stat, "inbound_rtp")
+                and stat.HasField("inbound_rtp")
+            ):
                 rtp_stats = stat.inbound_rtp
-                if hasattr(rtp_stats, 'inbound') and rtp_stats.HasField('inbound'):
+                if hasattr(rtp_stats, "inbound") and rtp_stats.HasField("inbound"):
                     inbound = rtp_stats.inbound
-                    stat_info.update({
-                        "packets_received": getattr(inbound, 'packets_received', 0),
-                        "bytes_received": getattr(inbound, 'bytes_received', 0),
-                        "packets_lost": getattr(inbound, 'packets_lost', 0),
-                        "jitter": getattr(inbound, 'jitter', 0),
-                        # Audio-specific metrics
-                        "total_samples_received": getattr(inbound, 'total_samples_received', 0),
-                        "concealed_samples": getattr(inbound, 'concealed_samples', 0),
-                        "concealment_events": getattr(inbound, 'concealment_events', 0),
-                        "audio_level": getattr(inbound, 'audio_level', 0),
-                        "total_audio_energy": getattr(inbound, 'total_audio_energy', 0),
-                        "total_samples_duration": getattr(inbound, 'total_samples_duration', 0),
-                        "jitter_buffer_delay": getattr(inbound, 'jitter_buffer_delay', 0),
-                        "jitter_buffer_target_delay": getattr(inbound, 'jitter_buffer_target_delay', 0),
-                        "jitter_buffer_emitted_count": getattr(inbound, 'jitter_buffer_emitted_count', 0),
-                        # Video-specific metrics  
-                        "frames_decoded": getattr(inbound, 'frames_decoded', 0),
-                        "frames_dropped": getattr(inbound, 'frames_dropped', 0),
-                        "frames_rendered": getattr(inbound, 'frames_rendered', 0),
-                        "key_frames_decoded": getattr(inbound, 'key_frames_decoded', 0),
-                        "frame_width": getattr(inbound, 'frame_width', 0),
-                        "frame_height": getattr(inbound, 'frame_height', 0),
-                        "frames_per_second": getattr(inbound, 'frames_per_second', 0),
-                        # Network quality metrics
-                        "nack_count": getattr(inbound, 'nack_count', 0),
-                        "fir_count": getattr(inbound, 'fir_count', 0),
-                        "pli_count": getattr(inbound, 'pli_count', 0),
-                        "packets_discarded": getattr(inbound, 'packets_discarded', 0),
-                        "retransmitted_packets_received": getattr(inbound, 'retransmitted_packets_received', 0),
-                        "retransmitted_bytes_received": getattr(inbound, 'retransmitted_bytes_received', 0),
-                    })
-                    
-            elif stat_type == 'candidate_pair' and hasattr(stat, 'candidate_pair'):
+                    stat_info.update(
+                        {
+                            "packets_received": getattr(inbound, "packets_received", 0),
+                            "bytes_received": getattr(inbound, "bytes_received", 0),
+                            "packets_lost": getattr(inbound, "packets_lost", 0),
+                            "jitter": getattr(inbound, "jitter", 0),
+                            # Audio-specific metrics
+                            "total_samples_received": getattr(inbound, "total_samples_received", 0),
+                            "concealed_samples": getattr(inbound, "concealed_samples", 0),
+                            "concealment_events": getattr(inbound, "concealment_events", 0),
+                            "audio_level": getattr(inbound, "audio_level", 0),
+                            "total_audio_energy": getattr(inbound, "total_audio_energy", 0),
+                            "total_samples_duration": getattr(inbound, "total_samples_duration", 0),
+                            "jitter_buffer_delay": getattr(inbound, "jitter_buffer_delay", 0),
+                            "jitter_buffer_target_delay": getattr(
+                                inbound, "jitter_buffer_target_delay", 0
+                            ),
+                            "jitter_buffer_emitted_count": getattr(
+                                inbound, "jitter_buffer_emitted_count", 0
+                            ),
+                            # Video-specific metrics
+                            "frames_decoded": getattr(inbound, "frames_decoded", 0),
+                            "frames_dropped": getattr(inbound, "frames_dropped", 0),
+                            "frames_rendered": getattr(inbound, "frames_rendered", 0),
+                            "key_frames_decoded": getattr(inbound, "key_frames_decoded", 0),
+                            "frame_width": getattr(inbound, "frame_width", 0),
+                            "frame_height": getattr(inbound, "frame_height", 0),
+                            "frames_per_second": getattr(inbound, "frames_per_second", 0),
+                            # Network quality metrics
+                            "nack_count": getattr(inbound, "nack_count", 0),
+                            "fir_count": getattr(inbound, "fir_count", 0),
+                            "pli_count": getattr(inbound, "pli_count", 0),
+                            "packets_discarded": getattr(inbound, "packets_discarded", 0),
+                            "retransmitted_packets_received": getattr(
+                                inbound, "retransmitted_packets_received", 0
+                            ),
+                            "retransmitted_bytes_received": getattr(
+                                inbound, "retransmitted_bytes_received", 0
+                            ),
+                        }
+                    )
+
+            elif stat_type == "candidate_pair" and hasattr(stat, "candidate_pair"):
                 # Add network connectivity stats
                 pair_stats = stat.candidate_pair
-                if hasattr(pair_stats, 'candidate_pair'):
+                if hasattr(pair_stats, "candidate_pair"):
                     pair_data = pair_stats.candidate_pair
-                    stat_info.update({
-                        "bytes_sent": getattr(pair_data, 'bytes_sent', 0),
-                        "bytes_received": getattr(pair_data, 'bytes_received', 0),
-                        "packets_sent": getattr(pair_data, 'packets_sent', 0),
-                        "packets_received": getattr(pair_data, 'packets_received', 0),
-                        "current_round_trip_time": getattr(pair_data, 'current_round_trip_time', 0),
-                        "total_round_trip_time": getattr(pair_data, 'total_round_trip_time', 0),
-                        "available_outgoing_bitrate": getattr(pair_data, 'available_outgoing_bitrate', 0),
-                        "available_incoming_bitrate": getattr(pair_data, 'available_incoming_bitrate', 0),
-                        "nominated": getattr(pair_data, 'nominated', False),
-                        "state": getattr(pair_data, 'state', 0),
-                        "requests_sent": getattr(pair_data, 'requests_sent', 0),
-                        "responses_received": getattr(pair_data, 'responses_received', 0),
-                        "packets_discarded_on_send": getattr(pair_data, 'packets_discarded_on_send', 0),
-                    })
-                    
-            elif stat_type == 'transport' and hasattr(stat, 'transport'):
+                    stat_info.update(
+                        {
+                            "bytes_sent": getattr(pair_data, "bytes_sent", 0),
+                            "bytes_received": getattr(pair_data, "bytes_received", 0),
+                            "packets_sent": getattr(pair_data, "packets_sent", 0),
+                            "packets_received": getattr(pair_data, "packets_received", 0),
+                            "current_round_trip_time": getattr(
+                                pair_data, "current_round_trip_time", 0
+                            ),
+                            "total_round_trip_time": getattr(pair_data, "total_round_trip_time", 0),
+                            "available_outgoing_bitrate": getattr(
+                                pair_data, "available_outgoing_bitrate", 0
+                            ),
+                            "available_incoming_bitrate": getattr(
+                                pair_data, "available_incoming_bitrate", 0
+                            ),
+                            "nominated": getattr(pair_data, "nominated", False),
+                            "state": getattr(pair_data, "state", 0),
+                            "requests_sent": getattr(pair_data, "requests_sent", 0),
+                            "responses_received": getattr(pair_data, "responses_received", 0),
+                            "packets_discarded_on_send": getattr(
+                                pair_data, "packets_discarded_on_send", 0
+                            ),
+                        }
+                    )
+
+            elif stat_type == "transport" and hasattr(stat, "transport"):
                 # Add transport-level stats
                 stat_info["connection_type"] = "subscriber"
-            
+
             # Only include meaningful stats
-            if stat_type in ['inbound_rtp', 'candidate_pair', 'transport', 'peer_connection']:
+            if stat_type in ["inbound_rtp", "candidate_pair", "transport", "peer_connection"]:
                 stats_dict["subscriber_stats"].append(stat_info)
-        
+
         return stats_dict, latency
 
     # Agent Management
-    async def list_agent_dispatches(self, room_name: Optional[str] = None) -> List:
-        """List agent dispatches, optionally filtered by room"""
+    async def list_agent_dispatches(self, room_name: str) -> List:
+        """List all agent dispatches in a specific room"""
         try:
             lk = await self._get_api()
-            req = api.ListAgentDispatchRequest(room=room_name or "")
-            resp = await lk.agent_dispatch.list_dispatch(req)
-            return list(resp.agent_dispatches) if hasattr(resp, "agent_dispatches") else []
+            dispatches = await lk.agent_dispatch.list_dispatch(room_name=room_name)
+            return list(dispatches) if dispatches else []
         except Exception as e:
-            print(f"Error listing agent dispatches: {e}")
+            print(f"Error listing agent dispatches for room {room_name}: {e}")
+            return []
+
+    async def get_all_agents(self) -> List[Dict[str, Any]]:
+        """Get all agents across all rooms with their status"""
+        try:
+            rooms, _ = await self.list_rooms()
+            all_agents = []
+            seen_agents = {}  # Track unique agents by name
+
+            for room in rooms:
+                try:
+                    # Get agent dispatches for this room
+                    dispatches = await self.list_agent_dispatches(room.name)
+
+                    for dispatch in dispatches:
+                        agent_name = getattr(dispatch, 'agent_name', 'Unknown')
+                        dispatch_id = getattr(dispatch, 'id', '')
+
+                        # Get job status
+                        jobs = []
+                        status = 'UNKNOWN'
+                        worker_id = None
+                        started_at = None
+
+                        if hasattr(dispatch, 'state') and dispatch.state:
+                            if hasattr(dispatch.state, 'jobs') and dispatch.state.jobs:
+                                for job in dispatch.state.jobs:
+                                    job_info = {
+                                        'id': getattr(job, 'id', ''),
+                                        'type': str(getattr(job, 'type', '')),
+                                        'status': 'UNKNOWN',
+                                        'worker_id': None,
+                                        'started_at': None,
+                                        'room': room.name,
+                                    }
+
+                                    if hasattr(job, 'state') and job.state:
+                                        # JobStatus: JS_PENDING=0, JS_RUNNING=1, JS_SUCCESS=2, JS_FAILED=3
+                                        job_status = getattr(job.state, 'status', 0)
+                                        status_map = {0: 'PENDING', 1: 'RUNNING', 2: 'SUCCESS', 3: 'FAILED'}
+                                        job_info['status'] = status_map.get(job_status, 'UNKNOWN')
+                                        job_info['worker_id'] = getattr(job.state, 'worker_id', None)
+                                        job_info['started_at'] = getattr(job.state, 'started_at', None)
+                                        job_info['error'] = getattr(job.state, 'error', None)
+
+                                        # Use the most recent job's status as the agent status
+                                        if job_info['status'] == 'RUNNING':
+                                            status = 'RUNNING'
+                                            worker_id = job_info['worker_id']
+                                            started_at = job_info['started_at']
+                                        elif status != 'RUNNING':
+                                            status = job_info['status']
+
+                                    jobs.append(job_info)
+
+                        agent_info = {
+                            'agent_name': agent_name,
+                            'dispatch_id': dispatch_id,
+                            'room': room.name,
+                            'status': status,
+                            'worker_id': worker_id,
+                            'started_at': started_at,
+                            'jobs': jobs,
+                            'concurrent_sessions': len([j for j in jobs if j['status'] == 'RUNNING']),
+                            'metadata': getattr(dispatch, 'metadata', ''),
+                        }
+
+                        # Track unique agents
+                        if agent_name not in seen_agents:
+                            seen_agents[agent_name] = {
+                                'agent_name': agent_name,
+                                'status': status,
+                                'concurrent_sessions': 0,
+                                'rooms': [],
+                                'dispatches': [],
+                            }
+
+                        seen_agents[agent_name]['dispatches'].append(agent_info)
+                        seen_agents[agent_name]['rooms'].append(room.name)
+                        if status == 'RUNNING':
+                            seen_agents[agent_name]['status'] = 'RUNNING'
+                            seen_agents[agent_name]['concurrent_sessions'] += agent_info['concurrent_sessions']
+
+                        all_agents.append(agent_info)
+
+                except Exception as e:
+                    print(f"Error getting agents for room {room.name}: {e}")
+                    continue
+
+            return list(seen_agents.values())
+
+        except Exception as e:
+            print(f"Error getting all agents: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     async def create_agent_dispatch(
@@ -1494,23 +1755,27 @@ class LiveKitClient:
         agent_name: str,
         metadata: Optional[str] = None,
     ):
-        """Create an agent dispatch to spawn an agent in a room"""
-        lk = await self._get_api()
-        req = api.CreateAgentDispatchRequest(
-            room=room_name,
-            agent_name=agent_name,
-            metadata=metadata or "",
-        )
-        return await lk.agent_dispatch.create_dispatch(req)
+        """Create an agent dispatch to join a room"""
+        try:
+            lk = await self._get_api()
+            req = api.CreateAgentDispatchRequest(
+                room=room_name,
+                agent_name=agent_name,
+                metadata=metadata or "",
+            )
+            return await lk.agent_dispatch.create_dispatch(req)
+        except Exception as e:
+            print(f"Error creating agent dispatch: {e}")
+            raise
 
     async def delete_agent_dispatch(self, dispatch_id: str, room_name: str):
         """Delete an agent dispatch"""
-        lk = await self._get_api()
-        req = api.DeleteAgentDispatchRequest(
-            dispatch_id=dispatch_id,
-            room=room_name,
-        )
-        return await lk.agent_dispatch.delete_dispatch(req)
+        try:
+            lk = await self._get_api()
+            return await lk.agent_dispatch.delete_dispatch(dispatch_id=dispatch_id, room_name=room_name)
+        except Exception as e:
+            print(f"Error deleting agent dispatch: {e}")
+            raise
 
     async def get_agents_in_rooms(self) -> List[Dict[str, Any]]:
         """Get all agents currently active in rooms by checking participants"""
@@ -1520,11 +1785,31 @@ class LiveKitClient:
 
             for room in rooms:
                 participants = await self.list_participants(room.name)
+
                 for participant in participants:
-                    # Check if participant is an agent (typically has agent-related metadata or kind)
-                    kind = getattr(participant, 'kind', 0)
+                    # Check if participant is an agent
                     # ParticipantInfo.Kind: STANDARD=0, INGRESS=1, EGRESS=2, SIP=3, AGENT=4
-                    if kind == 4:  # AGENT
+                    kind = getattr(participant, 'kind', None)
+                    is_agent = False
+
+                    if kind is not None:
+                        # Handle both enum and int comparisons
+                        try:
+                            # Try enum comparison first
+                            if hasattr(api.ParticipantInfo, 'Kind'):
+                                is_agent = kind == api.ParticipantInfo.Kind.AGENT
+                            else:
+                                # Fallback to int comparison
+                                kind_value = int(kind) if hasattr(kind, '__int__') else kind
+                                is_agent = kind_value == 4
+                        except (ValueError, TypeError):
+                            # If kind has a value attribute (protobuf enum)
+                            if hasattr(kind, 'value'):
+                                is_agent = kind.value == 4
+                            elif isinstance(kind, int):
+                                is_agent = kind == 4
+
+                    if is_agent:
                         agents.append({
                             "identity": participant.identity,
                             "name": getattr(participant, 'name', participant.identity),
@@ -1624,7 +1909,21 @@ class LiveKitClient:
             }
 
 
-# Dependency injection helper
+# Singleton instance for the LiveKit client
+_livekit_client_instance: Optional[LiveKitClient] = None
+
+
 def get_livekit_client() -> LiveKitClient:
-    """FastAPI dependency to get LiveKit client"""
-    return LiveKitClient()
+    """FastAPI dependency to get LiveKit client (singleton)"""
+    global _livekit_client_instance
+    if _livekit_client_instance is None:
+        _livekit_client_instance = LiveKitClient()
+    return _livekit_client_instance
+
+
+async def close_livekit_client():
+    """Close the singleton LiveKit client - call on app shutdown"""
+    global _livekit_client_instance
+    if _livekit_client_instance is not None:
+        await _livekit_client_instance.close()
+        _livekit_client_instance = None

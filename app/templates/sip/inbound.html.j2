@@ -9,14 +9,6 @@
 {% endblock %}
 
 {% block content %}
-<!-- Flash Messages -->
-{% if flash_message %}
-<div class="alert alert-{{ flash_type or 'info' }} alert-dismissible fade show" role="alert">
-    {{ flash_message }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-</div>
-{% endif %}
-
 <!-- Stats -->
 <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
     <div class="stat-card">
@@ -65,9 +57,18 @@
                     {% for trunk in trunks %}
                     <tr>
                         <td>
-                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
-                                {{ trunk.sip_trunk_id[:16] }}...
-                            </code>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
+                                    {{ trunk.sip_trunk_id[:16] }}...
+                                </code>
+                                <button 
+                                    class="btn btn-sm btn-outline-secondary" 
+                                    onclick="copyTrunkId('{{ trunk.sip_trunk_id }}', this)"
+                                    title="Copy trunk ID"
+                                    style="padding: 0.25rem 0.5rem; border: none; background: transparent; cursor: pointer;">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
                         </td>
                         <td>
                             <strong style="color: var(--text-primary);">{{ trunk.name or 'Unnamed' }}</strong>
@@ -140,10 +141,12 @@
                     <tr>
                         <th>Rule ID</th>
                         <th>Name</th>
-                        <th>Trunk IDs</th>
                         <th>Type</th>
-                        <th>Room / Prefix</th>
+                        <th>Trunk IDs</th>
+                        <th>Room Name</th>
+                        <th>PIN</th>
                         <th>Agent</th>
+                        <th>Hide Phone</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -151,12 +154,32 @@
                     {% for rule in rules %}
                     <tr>
                         <td>
-                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
-                                {{ rule.sip_dispatch_rule_id[:16] }}...
-                            </code>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.8125rem;">
+                                    {{ rule.sip_dispatch_rule_id[:16] }}...
+                                </code>
+                                <button 
+                                    class="btn btn-sm btn-outline-secondary" 
+                                    onclick="copyRuleId('{{ rule.sip_dispatch_rule_id }}', this)"
+                                    title="Copy rule ID"
+                                    style="padding: 0.25rem 0.5rem; border: none; background: transparent; cursor: pointer;">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
                         </td>
                         <td>
                             <strong style="color: var(--text-primary);">{{ rule.name or 'Unnamed' }}</strong>
+                        </td>
+                        <td>
+                            {% if rule.rule_type == 'direct' %}
+                            <span class="badge badge-primary">Direct</span>
+                            {% elif rule.rule_type == 'individual' %}
+                            <span class="badge badge-info">Individual</span>
+                            {% elif rule.rule_type == 'callee' %}
+                            <span class="badge badge-success">Callee</span>
+                            {% else %}
+                            <span class="badge badge-secondary">Unknown</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% if rule.trunk_ids %}
@@ -168,23 +191,41 @@
                             {% endif %}
                         </td>
                         <td>
-                            {% if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name %}
-                            <span class="badge bg-warning text-dark">Direct</span>
-                            {% elif rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix %}
-                            <span class="badge bg-info">Callee</span>
+                            {% if rule.rule %}
+                                {% set rule_obj = rule.rule %}
+                                {% set display_rule_type = rule.rule_type if rule.rule_type else 'direct' %}
+                                {% if display_rule_type == 'direct' %}
+                                <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_direct.room_name or '-' }}</span>
+                                {% elif display_rule_type == 'individual' %}
+                                <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_individual.room_prefix or '-' }}</span>
+                                {% elif display_rule_type == 'callee' %}
+                                <span style="color: var(--text-secondary);">{{ rule_obj.dispatch_rule_callee.room_prefix or '-' }}</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
                             {% else %}
-                            <span class="badge bg-success">Individual</span>
+                            <span class="text-muted">-</span>
                             {% endif %}
                         </td>
                         <td>
-                            {% if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name %}
-                            <span style="color: var(--text-secondary);">{{ rule.rule.dispatch_rule_direct.room_name }}</span>
-                            {% elif rule.rule and rule.rule.dispatch_rule_individual and rule.rule.dispatch_rule_individual.room_prefix %}
-                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">{{ rule.rule.dispatch_rule_individual.room_prefix }}*</code>
-                            {% elif rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix %}
-                            <code style="color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">{{ rule.rule.dispatch_rule_callee.room_prefix }}*</code>
+                            {% if rule.rule %}
+                                {% set rule_obj = rule.rule %}
+                                {% set pin_rule_type = rule.rule_type if rule.rule_type else 'direct' %}
+                                {% set pin_display = '' %}
+                                {% if pin_rule_type == 'direct' and rule_obj.dispatch_rule_direct.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_direct.pin %}
+                                {% elif pin_rule_type == 'individual' and rule_obj.dispatch_rule_individual.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_individual.pin %}
+                                {% elif pin_rule_type == 'callee' and rule_obj.dispatch_rule_callee.pin %}
+                                    {% set pin_display = rule_obj.dispatch_rule_callee.pin %}
+                                {% endif %}
+                                {% if pin_display %}
+                                <span class="badge badge-secondary">{{ pin_display }}</span>
+                                {% else %}
+                                <span class="text-muted">No PIN</span>
+                                {% endif %}
                             {% else %}
-                            <span class="text-muted">-</span>
+                            <span class="text-muted">No PIN</span>
                             {% endif %}
                         </td>
                         <td>
@@ -197,8 +238,37 @@
                             {% endif %}
                         </td>
                         <td>
+                            {% if rule.hide_phone_number %}
+                            <span class="badge badge-info">Yes</span>
+                            {% else %}
+                            <span class="badge badge-secondary">No</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             <div class="btn-group btn-group-sm" role="group">
-                                <button class="btn btn-outline-primary" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule.rule.dispatch_rule_direct.room_name if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name else '' }}', '{{ rule.rule.dispatch_rule_direct.pin if rule.rule and rule.rule.dispatch_rule_direct else (rule.rule.dispatch_rule_individual.pin if rule.rule and rule.rule.dispatch_rule_individual else (rule.rule.dispatch_rule_callee.pin if rule.rule and rule.rule.dispatch_rule_callee else '')) }}', '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ 'direct' if rule.rule and rule.rule.dispatch_rule_direct and rule.rule.dispatch_rule_direct.room_name else ('callee' if rule.rule and rule.rule.dispatch_rule_callee and rule.rule.dispatch_rule_callee.room_prefix else 'individual') }}', '{{ rule.rule.dispatch_rule_individual.room_prefix if rule.rule and rule.rule.dispatch_rule_individual else (rule.rule.dispatch_rule_callee.room_prefix if rule.rule and rule.rule.dispatch_rule_callee else '') }}')">
+                                {% set rule_obj = rule.rule if rule.rule else none %}
+                                {% set rule_type = rule.rule_type if rule.rule_type else 'direct' %}
+                                {# Extract values based on rule_type #}
+                                {% set randomize_value = 'false' %}
+                                {% set room_name_or_prefix = '' %}
+                                {% set pin_value = '' %}
+                                {% set room_prefix_value = '' %}
+                                {% if rule_obj %}
+                                    {% if rule_type == 'direct' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_direct.room_name or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_direct.pin or '' %}
+                                    {% elif rule_type == 'individual' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_individual.room_prefix or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_individual.pin or '' %}
+                                        {% set room_prefix_value = rule_obj.dispatch_rule_individual.room_prefix or '' %}
+                                    {% elif rule_type == 'callee' %}
+                                        {% set room_name_or_prefix = rule_obj.dispatch_rule_callee.room_prefix or '' %}
+                                        {% set pin_value = rule_obj.dispatch_rule_callee.pin or '' %}
+                                        {% set room_prefix_value = rule_obj.dispatch_rule_callee.room_prefix or '' %}
+                                        {% set randomize_value = 'true' if rule_obj.dispatch_rule_callee.randomize else 'false' %}
+                                    {% endif %}
+                                {% endif %}
+                                <button class="btn btn-outline-primary" data-rule-json="{{ rule.rule_json|e if rule.rule_json else '' }}" onclick="editRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or '' }}', '{{ rule.trunk_ids|join(',') if rule.trunk_ids else '' }}', '{{ rule_type }}', '{{ room_name_or_prefix }}', '{{ pin_value }}', {{ 'true' if rule.hide_phone_number else 'false' }}, '{{ rule.metadata or '' }}', '{{ rule.room_config.agents[0].agent_name if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ rule.room_config.agents[0].metadata if rule.room_config and rule.room_config.agents and rule.room_config.agents|length > 0 else '' }}', '{{ room_prefix_value }}', {{ randomize_value }}, this)">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                                 <button class="btn btn-outline-danger" onclick="confirmDeleteRule('{{ rule.sip_dispatch_rule_id }}', '{{ rule.name or 'Unnamed' }}')">
@@ -267,29 +337,6 @@
                             <input type="password" class="form-control" id="password" name="password" placeholder="Password">
                         </div>
                     </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="media_encryption" class="form-label">Media Encryption</label>
-                            <select class="form-select" id="media_encryption" name="media_encryption">
-                                <option value="">Default</option>
-                                <option value="disabled">Disabled</option>
-                                <option value="optional">Optional</option>
-                                <option value="required">Required</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="include_headers" class="form-label">Include Headers</label>
-                            <select class="form-select" id="include_headers" name="include_headers">
-                                <option value="">Default</option>
-                                <option value="no_headers">No Headers</option>
-                                <option value="all_headers">All Headers</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="krisp_enabled" name="krisp_enabled" value="true">
-                        <label class="form-check-label" for="krisp_enabled">Enable Krisp Noise Cancellation</label>
-                    </div>
                     <div class="mb-3">
                         <label for="metadata" class="form-label">Metadata (Optional)</label>
                         <textarea class="form-control" id="metadata" name="metadata" rows="2" placeholder="Additional metadata"></textarea>
@@ -349,29 +396,6 @@
                             <input type="password" class="form-control" id="edit_password" name="password" placeholder="Leave empty to keep current">
                         </div>
                     </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="edit_media_encryption" class="form-label">Media Encryption</label>
-                            <select class="form-select" id="edit_media_encryption" name="media_encryption">
-                                <option value="">Default</option>
-                                <option value="disabled">Disabled</option>
-                                <option value="optional">Optional</option>
-                                <option value="required">Required</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="edit_include_headers" class="form-label">Include Headers</label>
-                            <select class="form-select" id="edit_include_headers" name="include_headers">
-                                <option value="">Default</option>
-                                <option value="no_headers">No Headers</option>
-                                <option value="all_headers">All Headers</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="edit_krisp_enabled" name="krisp_enabled" value="true">
-                        <label class="form-check-label" for="edit_krisp_enabled">Enable Krisp Noise Cancellation</label>
-                    </div>
                     <div class="mb-3">
                         <label for="edit_metadata" class="form-label">Metadata (Optional)</label>
                         <textarea class="form-control" id="edit_metadata" name="metadata" rows="2"></textarea>
@@ -401,82 +425,107 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="rule_name" class="form-label">Rule Name</label>
-                        <input type="text" class="form-control" id="rule_name" name="rule_name" placeholder="e.g., Main Office Rule">
-                    </div>
-                    <!-- Inbound Routing Section -->
-                    <div class="mb-3">
-                        <h6 class="border-top pt-3 mb-3">
-                            <i class="bi bi-signpost-split"></i> Inbound Routing
-                        </h6>
-                        <p class="text-muted small">Configure how inbound calls are dispatched to LiveKit rooms by matching phone numbers and specific trunks.</p>
-                        
-                        <ul class="nav nav-tabs mb-3" id="createRoutingTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="create-phones-tab" data-bs-toggle="tab" data-bs-target="#create-phones" type="button" role="tab" aria-controls="create-phones" aria-selected="true">Phone numbers</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="create-trunks-tab" data-bs-toggle="tab" data-bs-target="#create-trunks" type="button" role="tab" aria-controls="create-trunks" aria-selected="false">Trunks</button>
-                            </li>
-                        </ul>
-                        
-                        <div class="tab-content" id="createRoutingTabsContent">
-                            <div class="tab-pane fade show active" id="create-phones" role="tabpanel" aria-labelledby="create-phones-tab">
-                                <div class="mb-3">
-                                    <label for="inbound_numbers" class="form-label">Phone Numbers</label>
-                                    <input type="text" class="form-control" id="inbound_numbers" name="inbound_numbers" placeholder="e.g., +1234567890">
-                                    <small class="form-text text-muted">Comma-separated list of phone numbers to match</small>
-                                </div>
+                    <!-- Tabs for Form/JSON -->
+                    <ul class="nav nav-tabs mb-3" id="createRuleTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="create-form-tab" data-bs-toggle="tab" data-bs-target="#create-form-pane" type="button" role="tab" aria-controls="create-form-pane" aria-selected="true">
+                                <i class="bi bi-form"></i> Form
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="create-json-tab" data-bs-toggle="tab" data-bs-target="#create-json-pane" type="button" role="tab" aria-controls="create-json-pane" aria-selected="false">
+                                <i class="bi bi-code-slash"></i> JSON
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="createRuleTabContent">
+                        <!-- Form Tab -->
+                        <div class="tab-pane fade show active" id="create-form-pane" role="tabpanel" aria-labelledby="create-form-tab">
+                            <div class="mb-3">
+                                <label for="rule_name" class="form-label">Rule Name</label>
+                                <input type="text" class="form-control" id="rule_name" name="rule_name" placeholder="e.g., Main Office Rule">
                             </div>
-                            <div class="tab-pane fade" id="create-trunks" role="tabpanel" aria-labelledby="create-trunks-tab">
-                                <div class="mb-3">
-                                    <label for="trunk_ids" class="form-label">Trunk IDs</label>
-                                    <select class="form-select" id="trunk_ids" name="trunk_ids" multiple aria-label="Select trunks" style="height: 150px;">
-                                        {% for trunk in trunks %}
-                                        <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
-                                        {% endfor %}
-                                    </select>
-                                    <small class="form-text text-muted">Select one or more trunks to apply this rule to (Hold Ctrl/Cmd to select multiple)</small>
-                                </div>
-                            </div>
+                            <div class="mb-3">
+                                <label for="trunk_ids" class="form-label">Trunk IDs</label>
+                        <!-- Selected Trunks Display -->
+                        <div id="selected_trunks_container" class="mb-2" style="min-height: 40px; padding: 0.5rem; border: 1px solid var(--border-color, #dee2e6); border-radius: 0.375rem; background-color: var(--bg-secondary, #f8f9fa); display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start;">
+                            <span class="text-muted" id="no_trunks_selected" style="align-self: center;">No trunks selected</span>
                         </div>
+                        <!-- Add Trunk Dropdown -->
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="addTrunkDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-plus-circle"></i> Add Trunk
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="addTrunkDropdown" id="trunk_dropdown_menu" style="max-height: 300px; overflow-y: auto;">
+                                {% if trunks %}
+                                    {% for trunk in trunks %}
+                                    <li>
+                                        <a class="dropdown-item trunk-option" href="#" data-trunk-id="{{ trunk.sip_trunk_id }}" data-trunk-name="{{ trunk.name or 'Unnamed' }}">
+                                            <strong>{{ trunk.name or 'Unnamed' }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ trunk.sip_trunk_id }}</small>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                {% else %}
+                                    <li><span class="dropdown-item-text text-muted">No trunks available</span></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        <input type="hidden" id="trunk_ids_hidden" name="trunk_ids">
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle"></i> Click "Add Trunk" to select trunks. Selected trunks will appear above.
+                        </small>
                     </div>
                     <div class="mb-3">
-                        <label for="rule_type" class="form-label">Rule Type</label>
-                        <select class="form-select" id="rule_type" name="rule_type" onchange="toggleRuleFields('create')">
-                            <option value="individual" selected>Individual (New room per caller)</option>
-                            <option value="direct">Direct (Dispatch to specific room)</option>
-                            <option value="callee">Callee (New room per callee)</option>
+                        <label for="dispatch_rule_type" class="form-label">Dispatch Rule Type</label>
+                        <select class="form-control" id="dispatch_rule_type" name="dispatch_rule_type" onchange="updateDispatchRuleFields(false)">
+                            <option value="direct">Direct - Route to a specific room</option>
+                            <option value="individual">Individual - Each caller gets their own room</option>
+                            <option value="callee">Callee - Route based on called number</option>
                         </select>
-                        <small class="form-text text-muted">Individual mode creates a unique private room for each caller</small>
+                        <small class="form-text text-muted">Select how calls should be routed to rooms</small>
                     </div>
-
-                    <div id="create_direct_fields" style="display: none;">
-                        <div class="mb-3">
-                            <label for="room_name" class="form-label">Room Name</label>
-                            <input type="text" class="form-control" id="room_name" name="room_name" placeholder="e.g., conference-room-1">
-                            <small class="form-text text-muted">The LiveKit room where calls will be routed (all callers share this room)</small>
+                    <!-- Direct Rule Fields -->
+                    <div class="mb-3" id="direct_rule_fields">
+                        <label for="room_name" class="form-label">Room Name</label>
+                        <input type="text" class="form-control" id="room_name" name="room_name" placeholder="e.g., conference-room-1">
+                        <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                    </div>
+                    <!-- Individual Rule Fields -->
+                    <div class="mb-3" id="individual_rule_fields">
+                        <label for="room_prefix" class="form-label">Room Prefix</label>
+                        <input type="text" class="form-control" id="room_prefix" name="room_prefix" placeholder="e.g., caller-">
+                        <small class="form-text text-muted">Prefix for individual room names (e.g., 'caller-' creates rooms like 'caller-123')</small>
+                    </div>
+                    <!-- Callee Rule Fields -->
+                    <div class="mb-3" id="callee_rule_fields">
+                        <label for="callee_room_prefix" class="form-label">Room Prefix</label>
+                        <input type="text" class="form-control" id="callee_room_prefix" name="room_prefix" placeholder="e.g., callee-">
+                        <small class="form-text text-muted">Prefix for room names based on called number</small>
+                    </div>
+                    <div class="mb-3" id="callee_randomize_fields">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="randomize" name="randomize" value="true">
+                            <label class="form-check-label" for="randomize">
+                                Randomize Room Name
+                            </label>
+                            <small class="form-text text-muted d-block">Add random suffix to room name for callee dispatch</small>
                         </div>
                     </div>
-
-                    <div id="create_prefix_fields">
-                        <div class="mb-3">
-                            <label for="room_prefix" class="form-label">Room Prefix</label>
-                            <input type="text" class="form-control" id="room_prefix" name="room_prefix" placeholder="e.g., call-" value="call-">
-                            <small class="form-text text-muted">Prefix for generated room names (e.g., call-abc123, call-def456)</small>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
+                    <!-- PIN Field (shared for all types) -->
+                    <div class="mb-3" id="pin_fields">
                         <label for="pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="pin" name="pin" placeholder="e.g., 1234">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
                     </div>
-
-                    <div id="create_randomize_field" class="mb-3 form-check" style="display: none;">
-                        <input type="checkbox" class="form-check-input" id="randomize" name="randomize" value="true">
-                        <label class="form-check-label" for="randomize">Randomize Room Name</label>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="hide_phone_number" name="hide_phone_number" value="true">
+                        <label class="form-check-label" for="hide_phone_number">
+                            Hide Phone Number
+                        </label>
+                        <small class="form-text text-muted d-block">Don't expose caller's phone number to room participants</small>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -487,20 +536,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="agent_name" class="form-label">Agent Name</label>
-                        {% if configured_agents %}
-                        <div class="input-group">
-                            <select class="form-select" id="agent_select" onchange="updateAgentName('create')">
-                                <option value="">-- Select existing agent or enter custom --</option>
-                                {% for agent in configured_agents %}
-                                <option value="{{ agent.name }}">{{ agent.name }}</option>
-                                {% endfor %}
-                                <option value="__custom__">Enter custom agent name...</option>
-                            </select>
-                        </div>
-                        <input type="text" class="form-control mt-2" id="agent_name" name="agent_name" placeholder="e.g., inbound-agent" style="display: none;">
-                        {% else %}
                         <input type="text" class="form-control" id="agent_name" name="agent_name" placeholder="e.g., inbound-agent">
-                        {% endif %}
                         <small class="form-text text-muted">Name of the agent to dispatch to the room</small>
                     </div>
                     <div class="mb-3">
@@ -509,9 +545,74 @@
                         <small class="form-text text-muted">Additional metadata to pass to the agent</small>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="rule_metadata" class="form-label">Rule Metadata (Optional)</label>
-                        <textarea class="form-control" id="rule_metadata" name="metadata" rows="2" placeholder="Additional metadata for the dispatch rule"></textarea>
+                            <div class="mb-3">
+                                <label for="rule_metadata" class="form-label">Rule Metadata (Optional)</label>
+                                <textarea class="form-control" id="rule_metadata" name="metadata" rows="2" placeholder="Additional metadata for the dispatch rule"></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- JSON Tab -->
+                        <div class="tab-pane fade" id="create-json-pane" role="tabpanel" aria-labelledby="create-json-tab">
+                            <div class="mb-3">
+                                <label for="plain_json" class="form-label">JSON Configuration</label>
+                                <textarea class="form-control font-monospace" id="plain_json" name="plain_json" rows="15" placeholder='{
+  "rule": {
+    "dispatch_rule_direct": {
+      "room_name": "my-room",
+      "pin": ""
+    }
+  },
+  "name": "My Rule",
+  "trunk_ids": ["trunk-id-1"],
+  "hide_phone_number": false,
+  "metadata": "optional metadata",
+  "attributes": {},
+  "room_config": {
+    "agents": [{
+      "agent_name": "my-agent",
+      "metadata": ""
+    }]
+  }
+}'></textarea>
+                                <small class="form-text text-muted">
+                                    <i class="bi bi-info-circle"></i> Provide complete JSON configuration. This will override all form fields.
+                                    <br><strong>Example for direct rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_direct": {
+      "room_name": "my-room",
+      "pin": ""
+    }
+  },
+  "name": "My Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                    <strong>Example for individual rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_individual": {
+      "room_prefix": "caller-",
+      "pin": ""
+    }
+  },
+  "name": "Individual Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                    <strong>Example for callee rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_callee": {
+      "room_prefix": "callee-",
+      "pin": "",
+      "randomize": false
+    }
+  },
+  "name": "Callee Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                </small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -539,81 +640,107 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="edit_rule_name" class="form-label">Rule Name</label>
-                        <input type="text" class="form-control" id="edit_rule_name" name="rule_name">
-                    </div>
-                    <!-- Inbound Routing Section -->
-                    <div class="mb-3">
-                        <h6 class="border-top pt-3 mb-3">
-                            <i class="bi bi-signpost-split"></i> Inbound Routing
-                        </h6>
-                        
-                        <ul class="nav nav-tabs mb-3" id="editRoutingTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="edit-phones-tab" data-bs-toggle="tab" data-bs-target="#edit-phones" type="button" role="tab" aria-controls="edit-phones" aria-selected="true">Phone numbers</button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="edit-trunks-tab" data-bs-toggle="tab" data-bs-target="#edit-trunks" type="button" role="tab" aria-controls="edit-trunks" aria-selected="false">Trunks</button>
-                            </li>
-                        </ul>
-                        
-                        <div class="tab-content" id="editRoutingTabsContent">
-                            <div class="tab-pane fade show active" id="edit-phones" role="tabpanel" aria-labelledby="edit-phones-tab">
-                                <div class="mb-3">
-                                    <label for="edit_inbound_numbers" class="form-label">Phone Numbers</label>
-                                    <input type="text" class="form-control" id="edit_inbound_numbers" name="inbound_numbers">
-                                    <small class="form-text text-muted">Comma-separated list of phone numbers to match</small>
-                                </div>
+                    <!-- Tabs for Form/JSON -->
+                    <ul class="nav nav-tabs mb-3" id="editRuleTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="edit-form-tab" data-bs-toggle="tab" data-bs-target="#edit-form-pane" type="button" role="tab" aria-controls="edit-form-pane" aria-selected="true">
+                                <i class="bi bi-form"></i> Form
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="edit-json-tab" data-bs-toggle="tab" data-bs-target="#edit-json-pane" type="button" role="tab" aria-controls="edit-json-pane" aria-selected="false">
+                                <i class="bi bi-code-slash"></i> JSON
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="editRuleTabContent">
+                        <!-- Form Tab -->
+                        <div class="tab-pane fade show active" id="edit-form-pane" role="tabpanel" aria-labelledby="edit-form-tab">
+                            <div class="mb-3">
+                                <label for="edit_rule_name" class="form-label">Rule Name</label>
+                                <input type="text" class="form-control" id="edit_rule_name" name="rule_name">
                             </div>
-                            <div class="tab-pane fade" id="edit-trunks" role="tabpanel" aria-labelledby="edit-trunks-tab">
-                                <div class="mb-3">
-                                    <label for="edit_trunk_ids" class="form-label">Trunk IDs</label>
-                                    <select class="form-select" id="edit_trunk_ids" name="trunk_ids" multiple aria-label="Select trunks" style="height: 150px;">
-                                        {% for trunk in trunks %}
-                                        <option value="{{ trunk.sip_trunk_id }}">{{ trunk.name or trunk.sip_trunk_id[:16] }} ({{ trunk.sip_trunk_id[:8] }}...)</option>
-                                        {% endfor %}
-                                    </select>
-                                    <small class="form-text text-muted">Select one or more trunks (Hold Ctrl/Cmd to select multiple)</small>
-                                </div>
-                            </div>
+                            <div class="mb-3">
+                                <label for="edit_trunk_ids" class="form-label">Trunk IDs</label>
+                        <!-- Selected Trunks Display -->
+                        <div id="edit_selected_trunks_container" class="mb-2" style="min-height: 40px; padding: 0.5rem; border: 1px solid var(--border-color, #dee2e6); border-radius: 0.375rem; background-color: var(--bg-secondary, #f8f9fa); display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start;">
+                            <span class="text-muted" id="edit_no_trunks_selected" style="align-self: center;">No trunks selected</span>
                         </div>
+                        <!-- Add Trunk Dropdown -->
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="editAddTrunkDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-plus-circle"></i> Add Trunk
+                            </button>
+                            <ul class="dropdown-menu" aria-labelledby="editAddTrunkDropdown" id="edit_trunk_dropdown_menu" style="max-height: 300px; overflow-y: auto;">
+                                {% if trunks %}
+                                    {% for trunk in trunks %}
+                                    <li>
+                                        <a class="dropdown-item edit-trunk-option" href="#" data-trunk-id="{{ trunk.sip_trunk_id }}" data-trunk-name="{{ trunk.name or 'Unnamed' }}">
+                                            <strong>{{ trunk.name or 'Unnamed' }}</strong>
+                                            <br>
+                                            <small class="text-muted">{{ trunk.sip_trunk_id }}</small>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                {% else %}
+                                    <li><span class="dropdown-item-text text-muted">No trunks available</span></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        <input type="hidden" id="edit_trunk_ids_hidden" name="trunk_ids">
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle"></i> Click "Add Trunk" to select trunks. Selected trunks will appear above.
+                        </small>
                     </div>
                     <div class="mb-3">
-                        <label for="edit_rule_type" class="form-label">Rule Type</label>
-                        <select class="form-select" id="edit_rule_type" name="rule_type" onchange="toggleRuleFields('edit')">
-                            <option value="individual">Individual (New room per caller)</option>
-                            <option value="direct">Direct (Dispatch to specific room)</option>
-                            <option value="callee">Callee (New room per callee)</option>
+                        <label for="edit_dispatch_rule_type" class="form-label">Dispatch Rule Type</label>
+                        <select class="form-control" id="edit_dispatch_rule_type" name="dispatch_rule_type" onchange="updateDispatchRuleFields(true)">
+                            <option value="direct">Direct - Route to a specific room</option>
+                            <option value="individual">Individual - Each caller gets their own room</option>
+                            <option value="callee">Callee - Route based on called number</option>
                         </select>
-                        <small class="form-text text-muted">Individual mode creates a unique private room for each caller</small>
+                        <small class="form-text text-muted">Select how calls should be routed to rooms</small>
                     </div>
-
-                    <div id="edit_direct_fields" style="display: none;">
-                        <div class="mb-3">
-                            <label for="edit_room_name" class="form-label">Room Name</label>
-                            <input type="text" class="form-control" id="edit_room_name" name="room_name">
-                            <small class="form-text text-muted">The LiveKit room where calls will be routed (all callers share this room)</small>
+                    <!-- Direct Rule Fields -->
+                    <div class="mb-3" id="edit_direct_rule_fields">
+                        <label for="edit_room_name" class="form-label">Room Name</label>
+                        <input type="text" class="form-control" id="edit_room_name" name="room_name">
+                        <small class="form-text text-muted">The LiveKit room where calls will be routed</small>
+                    </div>
+                    <!-- Individual Rule Fields -->
+                    <div class="mb-3" id="edit_individual_rule_fields">
+                        <label for="edit_room_prefix" class="form-label">Room Prefix</label>
+                        <input type="text" class="form-control" id="edit_room_prefix" name="room_prefix" placeholder="e.g., caller-">
+                        <small class="form-text text-muted">Prefix for individual room names (e.g., 'caller-' creates rooms like 'caller-123')</small>
+                    </div>
+                    <!-- Callee Rule Fields -->
+                    <div class="mb-3" id="edit_callee_rule_fields">
+                        <label for="edit_callee_room_prefix" class="form-label">Room Prefix</label>
+                        <input type="text" class="form-control" id="edit_callee_room_prefix" name="room_prefix" placeholder="e.g., callee-">
+                        <small class="form-text text-muted">Prefix for room names based on called number</small>
+                    </div>
+                    <div class="mb-3" id="edit_callee_randomize_fields">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="edit_randomize" name="randomize" value="true">
+                            <label class="form-check-label" for="edit_randomize">
+                                Randomize Room Name
+                            </label>
+                            <small class="form-text text-muted d-block">Add random suffix to room name for callee dispatch</small>
                         </div>
                     </div>
-
-                    <div id="edit_prefix_fields">
-                        <div class="mb-3">
-                            <label for="edit_room_prefix" class="form-label">Room Prefix</label>
-                            <input type="text" class="form-control" id="edit_room_prefix" name="room_prefix">
-                            <small class="form-text text-muted">Prefix for generated room names (e.g., call-abc123, call-def456)</small>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
+                    <!-- PIN Field (shared for all types) -->
+                    <div class="mb-3" id="edit_pin_fields">
                         <label for="edit_pin" class="form-label">PIN (Optional)</label>
                         <input type="text" class="form-control" id="edit_pin" name="pin">
                         <small class="form-text text-muted">Require callers to enter a PIN</small>
                     </div>
-
-                    <div id="edit_randomize_field" class="mb-3 form-check" style="display: none;">
-                        <input type="checkbox" class="form-check-input" id="edit_randomize" name="randomize" value="true">
-                        <label class="form-check-label" for="edit_randomize">Randomize Room Name</label>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit_hide_phone_number" name="hide_phone_number" value="true">
+                        <label class="form-check-label" for="edit_hide_phone_number">
+                            Hide Phone Number
+                        </label>
+                        <small class="form-text text-muted d-block">Don't expose caller's phone number to room participants</small>
                     </div>
                     
                     <!-- Agent Configuration Section -->
@@ -624,20 +751,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="edit_agent_name" class="form-label">Agent Name</label>
-                        {% if configured_agents %}
-                        <div class="input-group">
-                            <select class="form-select" id="edit_agent_select" onchange="updateAgentName('edit')">
-                                <option value="">-- No agent / Select existing --</option>
-                                {% for agent in configured_agents %}
-                                <option value="{{ agent.name }}">{{ agent.name }}</option>
-                                {% endfor %}
-                                <option value="__custom__">Enter custom agent name...</option>
-                            </select>
-                        </div>
-                        <input type="text" class="form-control mt-2" id="edit_agent_name" name="agent_name" placeholder="e.g., inbound-agent" style="display: none;">
-                        {% else %}
                         <input type="text" class="form-control" id="edit_agent_name" name="agent_name" placeholder="e.g., inbound-agent">
-                        {% endif %}
                         <small class="form-text text-muted">Name of the agent to dispatch to the room. Leave empty to remove agent</small>
                     </div>
                     <div class="mb-3">
@@ -646,9 +760,74 @@
                         <small class="form-text text-muted">Additional metadata to pass to the agent</small>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="edit_rule_metadata" class="form-label">Rule Metadata (Optional)</label>
-                        <textarea class="form-control" id="edit_rule_metadata" name="metadata" rows="2"></textarea>
+                            <div class="mb-3">
+                                <label for="edit_rule_metadata" class="form-label">Rule Metadata (Optional)</label>
+                                <textarea class="form-control" id="edit_rule_metadata" name="metadata" rows="2"></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- JSON Tab -->
+                        <div class="tab-pane fade" id="edit-json-pane" role="tabpanel" aria-labelledby="edit-json-tab">
+                            <div class="mb-3">
+                                <label for="edit_plain_json" class="form-label">JSON Configuration</label>
+                                <textarea class="form-control font-monospace" id="edit_plain_json" name="plain_json" rows="15" placeholder='{
+  "rule": {
+    "dispatch_rule_direct": {
+      "room_name": "my-room",
+      "pin": ""
+    }
+  },
+  "name": "My Rule",
+  "trunk_ids": ["trunk-id-1"],
+  "hide_phone_number": false,
+  "metadata": "optional metadata",
+  "attributes": {},
+  "room_config": {
+    "agents": [{
+      "agent_name": "my-agent",
+      "metadata": ""
+    }]
+  }
+}'></textarea>
+                                <small class="form-text text-muted">
+                                    <i class="bi bi-info-circle"></i> Provide complete JSON configuration. This will override all form fields.
+                                    <br><strong>Example for direct rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_direct": {
+      "room_name": "my-room",
+      "pin": ""
+    }
+  },
+  "name": "My Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                    <strong>Example for individual rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_individual": {
+      "room_prefix": "caller-",
+      "pin": ""
+    }
+  },
+  "name": "Individual Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                    <strong>Example for callee rule:</strong>
+                                    <pre class="bg-light p-2 mt-2 rounded" style="font-size: 0.875rem;"><code>{
+  "rule": {
+    "dispatch_rule_callee": {
+      "room_prefix": "callee-",
+      "pin": "",
+      "randomize": false
+    }
+  },
+  "name": "Callee Rule",
+  "trunk_ids": ["trunk-id"]
+}</code></pre>
+                                </small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -719,30 +898,126 @@
 </div>
 
 <script>
-// Toggle rule type fields visibility
-function toggleRuleFields(prefix) {
-    var ruleType = document.getElementById(prefix === 'create' ? 'rule_type' : 'edit_rule_type').value;
-    var directFields = document.getElementById(prefix + '_direct_fields');
-    var prefixFields = document.getElementById(prefix + '_prefix_fields');
-    var randomizeField = document.getElementById(prefix + '_randomize_field');
+// Copy Trunk ID to Clipboard
+function copyTrunkId(trunkId, button) {
+    function showSuccess() {
+        // Change icon to checked icon temporarily
+        var icon = button.querySelector('i');
+        var originalClass = icon.className;
+        icon.className = 'bi bi-check-circle-fill';
+        button.style.color = 'var(--success, #28a745)';
+        button.title = 'Copied!';
+        
+        // Reset after 2 seconds
+        setTimeout(function() {
+            icon.className = originalClass;
+            button.style.color = '';
+            button.title = 'Copy trunk ID';
+        }, 2000);
+    }
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(trunkId).then(function() {
+            showSuccess();
+        }).catch(function(err) {
+            console.error('Failed to copy: ', err);
+            // Fallback to older method
+            fallbackCopy(trunkId);
+        });
+    } else {
+        // Fallback to older method
+        fallbackCopy(trunkId);
+    }
+    
+    function fallbackCopy(text) {
+        // Create a temporary textarea element
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-999999px';
+        textarea.style.top = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        try {
+            var successful = document.execCommand('copy');
+            if (successful) {
+                showSuccess();
+            } else {
+                alert('Failed to copy trunk ID. Please copy manually: ' + text);
+            }
+        } catch (err) {
+            console.error('Fallback copy failed: ', err);
+            alert('Failed to copy trunk ID. Please copy manually: ' + text);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+}
 
-    if (ruleType === 'direct') {
-        directFields.style.display = 'block';
-        prefixFields.style.display = 'none';
-        if (randomizeField) randomizeField.style.display = 'none';
-    } else if (ruleType === 'individual') {
-        directFields.style.display = 'none';
-        prefixFields.style.display = 'block';
-        if (randomizeField) randomizeField.style.display = 'none';
-    } else if (ruleType === 'callee') {
-        directFields.style.display = 'none';
-        prefixFields.style.display = 'block';
-        if (randomizeField) randomizeField.style.display = 'block';
+// Copy Rule ID to Clipboard
+function copyRuleId(ruleId, button) {
+    function showSuccess() {
+        // Change icon to checked icon temporarily
+        var icon = button.querySelector('i');
+        var originalClass = icon.className;
+        icon.className = 'bi bi-check-circle-fill';
+        button.style.color = 'var(--success, #28a745)';
+        button.title = 'Copied!';
+        
+        // Reset after 2 seconds
+        setTimeout(function() {
+            icon.className = originalClass;
+            button.style.color = '';
+            button.title = 'Copy rule ID';
+        }, 2000);
+    }
+    
+    // Try modern Clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ruleId).then(function() {
+            showSuccess();
+        }).catch(function(err) {
+            console.error('Failed to copy: ', err);
+            // Fallback to older method
+            fallbackCopy(ruleId);
+        });
+    } else {
+        // Fallback to older method
+        fallbackCopy(ruleId);
+    }
+    
+    function fallbackCopy(text) {
+        // Create a temporary textarea element
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-999999px';
+        textarea.style.top = '-999999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        
+        try {
+            var successful = document.execCommand('copy');
+            if (successful) {
+                showSuccess();
+            } else {
+                alert('Failed to copy rule ID. Please copy manually: ' + text);
+            }
+        } catch (err) {
+            console.error('Fallback copy failed: ', err);
+            alert('Failed to copy rule ID. Please copy manually: ' + text);
+        } finally {
+            document.body.removeChild(textarea);
+        }
     }
 }
 
 // Edit Trunk
-function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, username, metadata, mediaEncryption, includeHeaders, krispEnabled) {
+function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, username, metadata) {
     document.getElementById('edit_sip_trunk_id').value = trunkId;
     document.getElementById('edit_trunk_name').value = name;
     document.getElementById('edit_numbers').value = numbers;
@@ -751,10 +1026,7 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
     document.getElementById('edit_username').value = username;
     document.getElementById('edit_metadata').value = metadata;
     document.getElementById('edit_password').value = ''; // Clear password field
-    document.getElementById('edit_media_encryption').value = mediaEncryption || '';
-    document.getElementById('edit_include_headers').value = includeHeaders || '';
-    document.getElementById('edit_krisp_enabled').checked = krispEnabled === 'true' || krispEnabled === true;
-
+    
     var modal = new bootstrap.Modal(document.getElementById('editTrunkModal'));
     modal.show();
 }
@@ -763,112 +1035,406 @@ function editTrunk(trunkId, name, numbers, allowedAddresses, allowedNumbers, use
 function confirmDeleteTrunk(trunkId, trunkName) {
     document.getElementById('delete_sip_trunk_id').value = trunkId;
     document.getElementById('delete_trunk_name').textContent = trunkName;
-
+    
     var modal = new bootstrap.Modal(document.getElementById('deleteTrunkModal'));
     modal.show();
 }
 
-// Update agent name based on selection
-function updateAgentName(prefix) {
-    var selectId = prefix === 'create' ? 'agent_select' : 'edit_agent_select';
-    var inputId = prefix === 'create' ? 'agent_name' : 'edit_agent_name';
-    var select = document.getElementById(selectId);
-    var input = document.getElementById(inputId);
+// Tag-based trunk selection functions
+var selectedTrunks = new Set();
+var editSelectedTrunks = new Set();
 
-    if (!select || !input) return;
-
-    var selectedValue = select.value;
-
-    if (selectedValue === '__custom__') {
-        // Show custom input field
-        input.style.display = 'block';
-        input.value = '';
-        input.focus();
-    } else {
-        // Hide custom input and set value from select
-        input.style.display = 'none';
-        input.value = selectedValue;
+function addTrunkTag(trunkId, trunkName, isEdit) {
+    var containerId = isEdit ? 'edit_selected_trunks_container' : 'selected_trunks_container';
+    var noTrunksId = isEdit ? 'edit_no_trunks_selected' : 'no_trunks_selected';
+    var hiddenInputId = isEdit ? 'edit_trunk_ids_hidden' : 'trunk_ids_hidden';
+    var selectedSet = isEdit ? editSelectedTrunks : selectedTrunks;
+    
+    if (selectedSet.has(trunkId)) {
+        return; // Already selected
+    }
+    
+    selectedSet.add(trunkId);
+    
+    var container = document.getElementById(containerId);
+    var noTrunksMsg = document.getElementById(noTrunksId);
+    if (noTrunksMsg) {
+        noTrunksMsg.remove();
+    }
+    
+    // Create tag element
+    var tag = document.createElement('span');
+    tag.className = 'badge bg-primary';
+    tag.style.cssText = 'display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; font-size: 0.875rem;';
+    tag.setAttribute('data-trunk-id', trunkId);
+    
+    var tagText = document.createElement('span');
+    tagText.textContent = trunkName + ' (' + trunkId.substring(0, 16) + '...)';
+    
+    var removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-close btn-close-white';
+    removeBtn.style.cssText = 'font-size: 0.75rem;';
+    removeBtn.setAttribute('aria-label', 'Remove');
+    removeBtn.onclick = function() {
+        removeTrunkTag(trunkId, isEdit);
+    };
+    
+    tag.appendChild(tagText);
+    tag.appendChild(removeBtn);
+    container.appendChild(tag);
+    
+    // Update hidden input
+    updateTrunkIdsHidden(isEdit);
+    
+    // Hide the option from dropdown
+    var optionSelector = isEdit ? '.edit-trunk-option[data-trunk-id="' + trunkId + '"]' : '.trunk-option[data-trunk-id="' + trunkId + '"]';
+    var option = document.querySelector(optionSelector);
+    if (option) {
+        option.style.display = 'none';
     }
 }
 
-// Set agent select value based on agent name
-function setAgentSelect(prefix, agentName) {
-    var selectId = prefix === 'create' ? 'agent_select' : 'edit_agent_select';
-    var inputId = prefix === 'create' ? 'agent_name' : 'edit_agent_name';
-    var select = document.getElementById(selectId);
-    var input = document.getElementById(inputId);
-
-    if (!select || !input) {
-        // Fallback if no select exists (no configured agents)
-        if (input) input.value = agentName || '';
-        return;
+function removeTrunkTag(trunkId, isEdit) {
+    var containerId = isEdit ? 'edit_selected_trunks_container' : 'selected_trunks_container';
+    var noTrunksId = isEdit ? 'edit_no_trunks_selected' : 'no_trunks_selected';
+    var selectedSet = isEdit ? editSelectedTrunks : selectedTrunks;
+    
+    selectedSet.delete(trunkId);
+    
+    var container = document.getElementById(containerId);
+    var tag = container.querySelector('[data-trunk-id="' + trunkId + '"]');
+    if (tag) {
+        tag.remove();
     }
+    
+    // Show "No trunks selected" if empty
+    if (selectedSet.size === 0) {
+        var noTrunksMsg = document.createElement('span');
+        noTrunksMsg.id = noTrunksId;
+        noTrunksMsg.className = 'text-muted';
+        noTrunksMsg.style.cssText = 'align-self: center;';
+        noTrunksMsg.textContent = 'No trunks selected';
+        container.appendChild(noTrunksMsg);
+    }
+    
+    // Update hidden input
+    updateTrunkIdsHidden(isEdit);
+    
+    // Show the option in dropdown again
+    var optionSelector = isEdit ? '.edit-trunk-option[data-trunk-id="' + trunkId + '"]' : '.trunk-option[data-trunk-id="' + trunkId + '"]';
+    var option = document.querySelector(optionSelector);
+    if (option) {
+        option.style.display = 'block';
+    }
+}
 
-    // Check if agentName matches any option in the select
-    var found = false;
-    for (var i = 0; i < select.options.length; i++) {
-        if (select.options[i].value === agentName) {
-            select.selectedIndex = i;
-            found = true;
-            break;
+function updateTrunkIdsHidden(isEdit) {
+    var hiddenInputId = isEdit ? 'edit_trunk_ids_hidden' : 'trunk_ids_hidden';
+    var selectedSet = isEdit ? editSelectedTrunks : selectedTrunks;
+    var hiddenInput = document.getElementById(hiddenInputId);
+    if (hiddenInput) {
+        hiddenInput.value = Array.from(selectedSet).join(',');
+    }
+}
+
+function clearTrunkTags(isEdit) {
+    var containerId = isEdit ? 'edit_selected_trunks_container' : 'selected_trunks_container';
+    var noTrunksId = isEdit ? 'edit_no_trunks_selected' : 'no_trunks_selected';
+    var selectedSet = isEdit ? editSelectedTrunks : selectedTrunks;
+    
+    selectedSet.clear();
+    var container = document.getElementById(containerId);
+    container.innerHTML = '';
+    
+    var noTrunksMsg = document.createElement('span');
+    noTrunksMsg.id = noTrunksId;
+    noTrunksMsg.className = 'text-muted';
+    noTrunksMsg.style.cssText = 'align-self: center;';
+    noTrunksMsg.textContent = 'No trunks selected';
+    container.appendChild(noTrunksMsg);
+    
+    // Show all options in dropdown
+    var optionSelector = isEdit ? '.edit-trunk-option' : '.trunk-option';
+    var options = document.querySelectorAll(optionSelector);
+    options.forEach(function(option) {
+        option.style.display = 'block';
+    });
+    
+    updateTrunkIdsHidden(isEdit);
+}
+
+// Update dispatch rule fields visibility based on type
+function updateDispatchRuleFields(isEdit) {
+    var prefix = isEdit ? 'edit_' : '';
+    var typeSelect = document.getElementById(prefix + 'dispatch_rule_type');
+
+    if (!typeSelect) return;
+
+    var selectedType = typeSelect.value;
+
+    // Get all field containers
+    var directFields = document.getElementById(prefix + 'direct_rule_fields');
+    var individualFields = document.getElementById(prefix + 'individual_rule_fields');
+    var calleeFields = document.getElementById(prefix + 'callee_rule_fields');
+    var calleeRandomizeFields = document.getElementById(prefix + 'callee_randomize_fields');
+    var pinFields = document.getElementById(prefix + 'pin_fields');
+
+    // Get the room_prefix input fields
+    var individualPrefixField = document.getElementById(isEdit ? 'edit_room_prefix' : 'room_prefix');
+    var calleePrefixField = document.getElementById(isEdit ? 'edit_callee_room_prefix' : 'callee_room_prefix');
+    var roomNameField = document.getElementById(isEdit ? 'edit_room_name' : 'room_name');
+
+    // Sync room_prefix values between individual and callee fields when switching types
+    if (individualPrefixField && calleePrefixField) {
+        if (selectedType === 'individual' && calleePrefixField.value && !individualPrefixField.value) {
+            individualPrefixField.value = calleePrefixField.value;
+        } else if (selectedType === 'callee' && individualPrefixField.value && !calleePrefixField.value) {
+            calleePrefixField.value = individualPrefixField.value;
         }
     }
 
-    if (found) {
-        input.style.display = 'none';
-        input.value = agentName;
-    } else if (agentName) {
-        // Custom agent name - show input
-        select.value = '__custom__';
-        input.style.display = 'block';
-        input.value = agentName;
-    } else {
-        // No agent - reset to first option
-        select.selectedIndex = 0;
-        input.style.display = 'none';
-        input.value = '';
+    // Hide all fields first
+    if (directFields) directFields.style.display = 'none';
+    if (individualFields) individualFields.style.display = 'none';
+    if (calleeFields) calleeFields.style.display = 'none';
+    if (calleeRandomizeFields) calleeRandomizeFields.style.display = 'none';
+    if (pinFields) pinFields.style.display = 'none';
+
+    // Disable all room name/prefix fields first (so hidden fields don't get submitted)
+    if (roomNameField) roomNameField.disabled = true;
+    if (individualPrefixField) individualPrefixField.disabled = true;
+    if (calleePrefixField) calleePrefixField.disabled = true;
+
+    // Show and enable fields based on selected type
+    if (selectedType === 'direct') {
+        if (directFields) directFields.style.display = 'block';
+        if (pinFields) pinFields.style.display = 'block';
+        if (roomNameField) roomNameField.disabled = false;
+    } else if (selectedType === 'individual') {
+        if (individualFields) individualFields.style.display = 'block';
+        if (pinFields) pinFields.style.display = 'block';
+        if (individualPrefixField) individualPrefixField.disabled = false;
+    } else if (selectedType === 'callee') {
+        if (calleeFields) calleeFields.style.display = 'block';
+        if (calleeRandomizeFields) calleeRandomizeFields.style.display = 'block';
+        if (pinFields) pinFields.style.display = 'block';
+        if (calleePrefixField) calleePrefixField.disabled = false;
     }
+}
+
+// Sync form fields to JSON
+function syncFormToJson(isEdit) {
+    var prefix = isEdit ? 'edit_' : '';
+    var dispatchRuleTypeEl = document.getElementById(prefix + 'dispatch_rule_type');
+    if (!dispatchRuleTypeEl) return; // Form not ready yet
+    
+    var dispatchRuleType = dispatchRuleTypeEl.value;
+    var nameEl = document.getElementById(isEdit ? 'edit_rule_name' : 'rule_name');
+    var name = nameEl ? nameEl.value : '';
+    var trunkIdsHidden = document.getElementById(prefix + 'trunk_ids_hidden');
+    var trunkIds = trunkIdsHidden ? trunkIdsHidden.value : '';
+    var hidePhoneNumberEl = document.getElementById(prefix + 'hide_phone_number');
+    var hidePhoneNumber = hidePhoneNumberEl ? hidePhoneNumberEl.checked : false;
+    var metadataEl = document.getElementById(prefix + 'rule_metadata');
+    var metadata = metadataEl ? metadataEl.value : '';
+    var agentNameEl = document.getElementById(prefix + 'agent_name');
+    var agentName = agentNameEl ? agentNameEl.value : '';
+    var agentMetadataEl = document.getElementById(prefix + 'agent_metadata');
+    var agentMetadata = agentMetadataEl ? agentMetadataEl.value : '';
+    
+    var roomNameOrPrefix = '';
+    var roomPrefix = '';
+    var pin = '';
+    var randomize = false;
+    
+    if (dispatchRuleType === 'direct') {
+        roomNameOrPrefix = document.getElementById(prefix + 'room_name').value;
+        pin = document.getElementById(prefix + 'pin').value;
+    } else if (dispatchRuleType === 'individual') {
+        roomPrefix = document.getElementById(prefix + 'room_prefix').value;
+        pin = document.getElementById(prefix + 'pin').value;
+    } else if (dispatchRuleType === 'callee') {
+        roomPrefix = document.getElementById(prefix + 'callee_room_prefix').value;
+        pin = document.getElementById(prefix + 'pin').value;
+        var randomizeCheckbox = document.getElementById(prefix + 'randomize');
+        randomize = randomizeCheckbox ? randomizeCheckbox.checked : false;
+    }
+    
+    var ruleJson = buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, randomize, name, trunkIds, hidePhoneNumber, metadata, agentName, agentMetadata);
+    var jsonEl = document.getElementById(prefix + 'plain_json');
+    if (jsonEl) {
+        jsonEl.value = ruleJson;
+    }
+}
+
+// Build JSON representation from rule data
+function buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, randomize, name, trunkIds, hidePhoneNumber, metadata, agentName, agentMetadata) {
+    var ruleJson = {};
+    
+    // Build rule object based on type
+    if (dispatchRuleType === 'direct') {
+        ruleJson.rule = {
+            dispatch_rule_direct: {
+                room_name: roomNameOrPrefix || '',
+                pin: pin || ''
+            }
+        };
+    } else if (dispatchRuleType === 'individual') {
+        ruleJson.rule = {
+            dispatch_rule_individual: {
+                room_prefix: roomPrefix || roomNameOrPrefix || '',
+                pin: pin || ''
+            }
+        };
+    } else if (dispatchRuleType === 'callee') {
+        ruleJson.rule = {
+            dispatch_rule_callee: {
+                room_prefix: roomPrefix || roomNameOrPrefix || '',
+                pin: pin || '',
+                randomize: randomize === true || randomize === 'true'
+            }
+        };
+    }
+    
+    // Add other fields
+    if (name) {
+        ruleJson.name = name;
+    }
+    if (trunkIds) {
+        var trunkIdArray = trunkIds.split(',').map(id => id.trim()).filter(id => id.length > 0);
+        if (trunkIdArray.length > 0) {
+            ruleJson.trunk_ids = trunkIdArray;
+        }
+    }
+    if (hidePhoneNumber === true || hidePhoneNumber === 'true') {
+        ruleJson.hide_phone_number = true;
+    }
+    if (metadata) {
+        ruleJson.metadata = metadata;
+    }
+    if (agentName) {
+        ruleJson.room_config = {
+            agents: [{
+                agent_name: agentName,
+                metadata: agentMetadata || ''
+            }]
+        };
+    }
+    
+    return JSON.stringify(ruleJson, null, 2);
 }
 
 // Edit Rule
-function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, agentMetadata, ruleType, roomPrefix) {
-    document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
-    document.getElementById('edit_rule_name').value = name;
-    document.getElementById('edit_room_name').value = roomName || '';
-    document.getElementById('edit_pin').value = pin || '';
-    document.getElementById('edit_rule_metadata').value = metadata || '';
-    document.getElementById('edit_agent_metadata').value = agentMetadata || '';
-    document.getElementById('edit_room_prefix').value = roomPrefix || 'call-';
-
-    // Set agent name with dropdown support
-    setAgentSelect('edit', agentName);
-
-    // Set rule type and toggle fields
-    var ruleTypeSelect = document.getElementById('edit_rule_type');
-    if (ruleType) {
-        ruleTypeSelect.value = ruleType;
-    } else if (roomName) {
-        ruleTypeSelect.value = 'direct';
-    } else {
-        ruleTypeSelect.value = 'individual';
-    }
-    toggleRuleFields('edit');
-
-    // Handle trunk IDs selection
-    var trunkSelect = document.getElementById('edit_trunk_ids');
-    // Clear all selections first
-    for (var i = 0; i < trunkSelect.options.length; i++) {
-        trunkSelect.options[i].selected = false;
-    }
-    // Select the matching trunk IDs
-    if (trunkIds) {
-        var trunkIdArray = trunkIds.split(',');
-        for (var i = 0; i < trunkSelect.options.length; i++) {
-            if (trunkIdArray.includes(trunkSelect.options[i].value)) {
-                trunkSelect.options[i].selected = true;
+function editRule(ruleId, name, trunkIds, dispatchRuleType, roomNameOrPrefix, pin, hidePhoneNumber, metadata, agentName, agentMetadata, roomPrefix, randomize, buttonElement) {
+    // Get server JSON from data attribute (base64 encoded) - this is the most reliable source
+    var serverRuleJson = '';
+    var parsedJson = null;
+    if (buttonElement && buttonElement.getAttribute) {
+        var ruleJsonB64 = buttonElement.getAttribute('data-rule-json') || '';
+        if (ruleJsonB64) {
+            try {
+                // Decode base64
+                serverRuleJson = atob(ruleJsonB64);
+                parsedJson = JSON.parse(serverRuleJson);
+            } catch (e) {
+                console.warn('Failed to decode/parse rule JSON:', e);
             }
         }
     }
+
+    // Extract values from server JSON if available (more reliable than template extraction)
+    if (parsedJson) {
+        // Get rule type and values from parsed JSON
+        if (parsedJson.rule) {
+            if (parsedJson.rule.dispatch_rule_direct) {
+                dispatchRuleType = 'direct';
+                roomNameOrPrefix = parsedJson.rule.dispatch_rule_direct.room_name || '';
+                pin = parsedJson.rule.dispatch_rule_direct.pin || '';
+            } else if (parsedJson.rule.dispatch_rule_individual) {
+                dispatchRuleType = 'individual';
+                roomPrefix = parsedJson.rule.dispatch_rule_individual.room_prefix || '';
+                roomNameOrPrefix = roomPrefix;
+                pin = parsedJson.rule.dispatch_rule_individual.pin || '';
+            } else if (parsedJson.rule.dispatch_rule_callee) {
+                dispatchRuleType = 'callee';
+                roomPrefix = parsedJson.rule.dispatch_rule_callee.room_prefix || '';
+                roomNameOrPrefix = roomPrefix;
+                pin = parsedJson.rule.dispatch_rule_callee.pin || '';
+                randomize = parsedJson.rule.dispatch_rule_callee.randomize || false;
+            }
+        }
+        // Get other fields from JSON
+        name = parsedJson.name || name || '';
+        trunkIds = parsedJson.trunk_ids ? parsedJson.trunk_ids.join(',') : trunkIds || '';
+        hidePhoneNumber = parsedJson.hide_phone_number || false;
+        metadata = parsedJson.metadata || '';
+
+        // Get agent info from JSON
+        if (parsedJson.room_config && parsedJson.room_config.agents && parsedJson.room_config.agents.length > 0) {
+            agentName = parsedJson.room_config.agents[0].agent_name || '';
+            agentMetadata = parsedJson.room_config.agents[0].metadata || '';
+        }
+    }
+
+    document.getElementById('edit_sip_dispatch_rule_id').value = ruleId;
+    document.getElementById('edit_rule_name').value = name || '';
+
+    // Clear and populate trunk tags
+    clearTrunkTags(true);
+    if (trunkIds) {
+        var trunkIdArray = trunkIds.split(',').map(id => id.trim()).filter(id => id.length > 0);
+        trunkIdArray.forEach(function(trunkId) {
+            // Find the trunk name from the dropdown options
+            var option = document.querySelector('.edit-trunk-option[data-trunk-id="' + trunkId + '"]');
+            var trunkName = 'Unknown Trunk';
+            if (option) {
+                trunkName = option.getAttribute('data-trunk-name');
+            }
+            addTrunkTag(trunkId, trunkName, true);
+        });
+    }
+
+    // Set dispatch rule type
+    if (dispatchRuleType) {
+        document.getElementById('edit_dispatch_rule_type').value = dispatchRuleType;
+    }
+
+    // Update field visibility
+    updateDispatchRuleFields(true);
+
+    // Set fields based on dispatch rule type
+    if (dispatchRuleType === 'direct') {
+        document.getElementById('edit_room_name').value = roomNameOrPrefix || '';
+    } else if (dispatchRuleType === 'individual') {
+        // For individual, use roomPrefix if available, otherwise use roomNameOrPrefix
+        var prefixValue = (roomPrefix && roomPrefix.trim()) ? roomPrefix : (roomNameOrPrefix || '');
+        document.getElementById('edit_room_prefix').value = prefixValue;
+    } else if (dispatchRuleType === 'callee') {
+        // For callee, use roomPrefix if available, otherwise use roomNameOrPrefix
+        var prefixValue = (roomPrefix && roomPrefix.trim()) ? roomPrefix : (roomNameOrPrefix || '');
+        document.getElementById('edit_callee_room_prefix').value = prefixValue;
+        if (randomize !== undefined) {
+            document.getElementById('edit_randomize').checked = randomize === true || randomize === 'true';
+        }
+    }
+
+    document.getElementById('edit_pin').value = pin || '';
+    document.getElementById('edit_hide_phone_number').checked = hidePhoneNumber === true || hidePhoneNumber === 'true';
+    document.getElementById('edit_agent_name').value = agentName || '';
+    document.getElementById('edit_agent_metadata').value = agentMetadata || '';
+    document.getElementById('edit_rule_metadata').value = metadata || '';
+
+    // Populate JSON textarea
+    var ruleJson;
+    if (serverRuleJson && serverRuleJson.trim()) {
+        // Use server-provided JSON (most accurate)
+        ruleJson = JSON.stringify(parsedJson, null, 2);
+    } else {
+        // Build from form fields
+        ruleJson = buildRuleJson(dispatchRuleType, roomNameOrPrefix, pin, roomPrefix, randomize, name, trunkIds, hidePhoneNumber, metadata, agentName, agentMetadata);
+    }
+    document.getElementById('edit_plain_json').value = ruleJson;
 
     var modal = new bootstrap.Modal(document.getElementById('editRuleModal'));
     modal.show();
@@ -878,10 +1444,205 @@ function editRule(ruleId, name, trunkIds, roomName, pin, metadata, agentName, ag
 function confirmDeleteRule(ruleId, ruleName) {
     document.getElementById('delete_sip_dispatch_rule_id').value = ruleId;
     document.getElementById('delete_rule_name').textContent = ruleName;
-
+    
     var modal = new bootstrap.Modal(document.getElementById('deleteRuleModal'));
     modal.show();
 }
+
+// Initialize trunk selection UI
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize dispatch rule fields visibility
+    updateDispatchRuleFields(false);
+    updateDispatchRuleFields(true);
+    
+    // Handle tab switching for edit rule modal
+    var editFormTab = document.getElementById('edit-form-tab');
+    var editJsonTab = document.getElementById('edit-json-tab');
+    if (editFormTab && editJsonTab) {
+        editFormTab.addEventListener('shown.bs.tab', function() {
+            // When switching to form tab, ensure form fields are visible
+            updateDispatchRuleFields(true);
+            // Don't auto-sync to JSON - let user manually edit JSON if they want
+        });
+        editJsonTab.addEventListener('shown.bs.tab', function() {
+            // When switching to JSON tab, sync form to JSON for preview
+            syncFormToJson(true);
+        });
+    }
+    
+    // Handle tab switching for create rule modal
+    var createFormTab = document.getElementById('create-form-tab');
+    var createJsonTab = document.getElementById('create-json-tab');
+    if (createFormTab && createJsonTab) {
+        createFormTab.addEventListener('shown.bs.tab', function() {
+            // When switching to form tab, ensure form fields are visible
+            updateDispatchRuleFields(false);
+            // Don't auto-sync to JSON - let user manually edit JSON if they want
+        });
+        createJsonTab.addEventListener('shown.bs.tab', function() {
+            // When switching to JSON tab, sync form to JSON for preview
+            syncFormToJson(false);
+        });
+    }
+    
+    // Reset tabs when modals are closed
+    var createRuleModal = document.getElementById('createRuleModal');
+    if (createRuleModal) {
+        createRuleModal.addEventListener('hidden.bs.modal', function() {
+            // Reset to form tab
+            var formTab = bootstrap.Tab.getInstance(createFormTab);
+            if (formTab) {
+                formTab.show();
+            }
+        });
+    }
+    
+    var editRuleModal = document.getElementById('editRuleModal');
+    if (editRuleModal) {
+        editRuleModal.addEventListener('hidden.bs.modal', function() {
+            // Reset to form tab
+            var formTab = bootstrap.Tab.getInstance(editFormTab);
+            if (formTab) {
+                formTab.show();
+            }
+        });
+    }
+    
+    // Handle Create Rule modal - trunk selection
+    var createTrunkOptions = document.querySelectorAll('.trunk-option');
+    createTrunkOptions.forEach(function(option) {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            var trunkId = this.getAttribute('data-trunk-id');
+            var trunkName = this.getAttribute('data-trunk-name');
+            addTrunkTag(trunkId, trunkName, false);
+            
+            // Close dropdown
+            var dropdown = bootstrap.Dropdown.getInstance(document.getElementById('addTrunkDropdown'));
+            if (dropdown) {
+                dropdown.hide();
+            }
+        });
+    });
+    
+    // Handle Edit Rule modal - trunk selection
+    var editTrunkOptions = document.querySelectorAll('.edit-trunk-option');
+    editTrunkOptions.forEach(function(option) {
+        option.addEventListener('click', function(e) {
+            e.preventDefault();
+            var trunkId = this.getAttribute('data-trunk-id');
+            var trunkName = this.getAttribute('data-trunk-name');
+            addTrunkTag(trunkId, trunkName, true);
+            
+            // Close dropdown
+            var dropdown = bootstrap.Dropdown.getInstance(document.getElementById('editAddTrunkDropdown'));
+            if (dropdown) {
+                dropdown.hide();
+            }
+        });
+    });
+    
+    // Clear trunk tags when Create Rule modal is closed
+    var createRuleModal = document.getElementById('createRuleModal');
+    if (createRuleModal) {
+        createRuleModal.addEventListener('hidden.bs.modal', function() {
+            clearTrunkTags(false);
+        });
+    }
+    
+    // Clear trunk tags when Edit Rule modal is closed
+    var editRuleModal = document.getElementById('editRuleModal');
+    if (editRuleModal) {
+        editRuleModal.addEventListener('hidden.bs.modal', function() {
+            clearTrunkTags(true);
+        });
+    }
+    
+    // Handle form submission - values are already in hidden inputs
+    var createRuleForm = document.querySelector('form[action="/sip-inbound/rule/create"]');
+    if (createRuleForm) {
+        createRuleForm.addEventListener('submit', function(e) {
+            updateTrunkIdsHidden(false);
+
+            // Check which tab is active (check both class and aria-selected for reliability)
+            var createJsonTabButton = document.getElementById('create-json-tab');
+            var isJsonTabActive = createJsonTabButton && (
+                createJsonTabButton.classList.contains('active') ||
+                createJsonTabButton.getAttribute('aria-selected') === 'true'
+            );
+
+            if (!isJsonTabActive) {
+                // User is on form tab, clear JSON field so backend uses form fields
+                var jsonField = document.getElementById('plain_json');
+                if (jsonField) {
+                    jsonField.value = '';
+                }
+
+                // Ensure the correct room name/prefix field is enabled before submit
+                var dispatchType = document.getElementById('dispatch_rule_type').value;
+                var roomNameField = document.getElementById('room_name');
+                var individualPrefixField = document.getElementById('room_prefix');
+                var calleePrefixField = document.getElementById('callee_room_prefix');
+
+                // Disable all first
+                if (roomNameField) roomNameField.disabled = true;
+                if (individualPrefixField) individualPrefixField.disabled = true;
+                if (calleePrefixField) calleePrefixField.disabled = true;
+
+                // Enable the correct one based on dispatch type
+                if (dispatchType === 'direct' && roomNameField) {
+                    roomNameField.disabled = false;
+                } else if (dispatchType === 'individual' && individualPrefixField) {
+                    individualPrefixField.disabled = false;
+                } else if (dispatchType === 'callee' && calleePrefixField) {
+                    calleePrefixField.disabled = false;
+                }
+            }
+        });
+    }
+    
+    var editRuleForm = document.querySelector('form[action="/sip-inbound/rule/update"]');
+    if (editRuleForm) {
+        editRuleForm.addEventListener('submit', function(e) {
+            updateTrunkIdsHidden(true);
+
+            // Check which tab is active (check both class and aria-selected for reliability)
+            var editJsonTabButton = document.getElementById('edit-json-tab');
+            var isJsonTabActive = editJsonTabButton && (
+                editJsonTabButton.classList.contains('active') ||
+                editJsonTabButton.getAttribute('aria-selected') === 'true'
+            );
+
+            if (!isJsonTabActive) {
+                // User is on form tab, clear JSON field so backend uses form fields
+                var jsonField = document.getElementById('edit_plain_json');
+                if (jsonField) {
+                    jsonField.value = '';
+                }
+
+                // Ensure the correct room name/prefix field is enabled before submit
+                var dispatchType = document.getElementById('edit_dispatch_rule_type').value;
+                var roomNameField = document.getElementById('edit_room_name');
+                var individualPrefixField = document.getElementById('edit_room_prefix');
+                var calleePrefixField = document.getElementById('edit_callee_room_prefix');
+
+                // Disable all first
+                if (roomNameField) roomNameField.disabled = true;
+                if (individualPrefixField) individualPrefixField.disabled = true;
+                if (calleePrefixField) calleePrefixField.disabled = true;
+
+                // Enable the correct one based on dispatch type
+                if (dispatchType === 'direct' && roomNameField) {
+                    roomNameField.disabled = false;
+                } else if (dispatchType === 'individual' && individualPrefixField) {
+                    individualPrefixField.disabled = false;
+                } else if (dispatchType === 'callee' && calleePrefixField) {
+                    calleePrefixField.disabled = false;
+                }
+            }
+        });
+    }
+});
 
 // Auto-dismiss flash messages after 5 seconds
 setTimeout(function() {
