@@ -353,11 +353,11 @@ class LiveKitClient:
 
         if media_encryption:
             if media_encryption == "disabled":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_DISABLE
             elif media_encryption == "optional":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_ALLOW
             elif media_encryption == "required":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_REQUIRE
         
         if include_headers:
              if include_headers == "no_headers":
@@ -446,11 +446,11 @@ class LiveKitClient:
         # Set media encryption
         if media_encryption is not None:
             if media_encryption == "disabled":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_DISABLE
             elif media_encryption == "optional":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_ALLOW
             elif media_encryption == "required":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_REQUIRE
         
         # Set include headers
         if include_headers is not None:
@@ -512,11 +512,11 @@ class LiveKitClient:
             
         if media_encryption:
             if media_encryption == "disabled":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_DISABLE
             elif media_encryption == "optional":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_ALLOW
             elif media_encryption == "required":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_REQUIRE
         
         if include_headers:
              if include_headers == "no_headers":
@@ -571,11 +571,11 @@ class LiveKitClient:
 
         if media_encryption is not None:
             if media_encryption == "disabled":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_DISABLED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_DISABLE
             elif media_encryption == "optional":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_OPTIONAL
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_ALLOW
             elif media_encryption == "required":
-                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPTION_REQUIRED
+                trunk_info.media_encryption = api.SIPMediaEncryption.SIP_MEDIA_ENCRYPT_REQUIRE
         
         if include_headers is not None:
              if include_headers == "no_headers":

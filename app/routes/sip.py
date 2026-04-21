@@ -128,6 +128,7 @@ async def create_sip_trunk(
             metadata=metadata,
             headers=headers_dict,
             headers_to_attributes=headers_to_attrs_dict,
+            media_encryption=media_encryption,
         )
 
         # Success message
@@ -206,6 +207,7 @@ async def update_sip_trunk(
         print(f"  username: {username}")
         print(f"  destination_country: {destination_country}")
         print(f"  metadata: {metadata}")
+        print(f"  media_encryption: {media_encryption}")
 
         await lk.update_sip_trunk(
             sip_trunk_id=sip_trunk_id,
@@ -219,6 +221,7 @@ async def update_sip_trunk(
             metadata=metadata,
             headers=headers_dict,
             headers_to_attributes=headers_to_attrs_dict,
+            media_encryption=media_encryption,
         )
 
         # Success message
