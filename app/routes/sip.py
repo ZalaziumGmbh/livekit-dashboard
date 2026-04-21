@@ -85,6 +85,7 @@ async def create_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -164,6 +165,7 @@ async def update_sip_trunk(
     metadata: Optional[str] = Form(None),
     headers: Optional[str] = Form(None),
     headers_to_attributes: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
     json_data: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
@@ -317,6 +319,7 @@ async def create_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Create a new SIP inbound trunk"""
@@ -347,6 +350,7 @@ async def create_sip_inbound_trunk(
             auth_username=username,
             auth_password=password,
             metadata=metadata,
+            media_encryption=media_encryption,
         )
 
         # Success message
@@ -380,6 +384,7 @@ async def update_sip_inbound_trunk(
     username: Optional[str] = Form(None),
     password: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    media_encryption: Optional[str] = Form(None),
     lk: LiveKitClient = Depends(get_livekit_client),
 ):
     """Update an existing SIP inbound trunk"""
@@ -411,6 +416,7 @@ async def update_sip_inbound_trunk(
             auth_username=username,
             auth_password=password if password else None,
             metadata=metadata,
+            media_encryption=media_encryption,
         )
 
         # Success message
@@ -519,23 +525,17 @@ async def create_dispatch_rule(
             url=f"/sip-inbound?flash_message={success_msg}&flash_type=success", status_code=303
         )
     except Exception as e:
-        # Extract user-friendly error message
-        error_msg = str(e)
-        if hasattr(e, 'message'):
-            error_msg = e.message
-        elif hasattr(e, 'args') and e.args:
-            error_msg = str(e.args[0])
-        
+        error_msg = str(getattr(e, "message", None) or (e.args[0] if e.args else e))
+
         print(f"Error creating SIP dispatch rule: {e}")
         import traceback
         traceback.print_exc()
 
-        # Error message - make it more user-friendly
         if "missing rule" in error_msg.lower():
             error_msg = "Invalid dispatch rule configuration. Please check your settings."
         elif "invalid_argument" in error_msg.lower():
             error_msg = "Invalid configuration. Please verify all required fields are filled."
-        
+
         encoded_error = quote(f"Failed to create dispatch rule: {error_msg}")
         return RedirectResponse(
             url=f"/sip-inbound?flash_message={encoded_error}&flash_type=danger", status_code=303
